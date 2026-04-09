@@ -106,6 +106,11 @@ components:
           type: string
           description: Specific model revision/version to download
           example: main
+        quantize:
+          type: string
+          nullable: true
+          description: Ultralytics quantization dataset used to enable INT8 export
+          example: coco128
         config:
           $ref: "#/components/schemas/Config"
           description: Configuration for OpenVINO conversion (required if is_ovms is true)

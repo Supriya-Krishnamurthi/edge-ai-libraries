@@ -286,6 +286,7 @@ class ModelRequest(BaseModel):
     type: Optional[ModelType] = None
     is_ovms: bool = False
     revision: Optional[str] = None
+    quantize: Optional[str] = None # Ultralytics quantization dataset (for example: coco) used to enable INT8 export
     config: Optional[Config] = None
 
 
