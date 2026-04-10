@@ -74,6 +74,11 @@ COPY ./src/classifier_startup.py ./src/opcua_alerts.py ./src/main.py /app/
 
 COPY ./config/kapacitor*.conf /app/config/
 
+#Copying for Core Pinning
+COPY ./docker/run.sh /app/
+COPY ./docker/detect-cores.sh /app/
+RUN chmod +x /app/run.sh /app/detect-cores.sh
+
 # Optionally download copyleft sources if requested
 ARG COPYLEFT_SOURCES=false
 RUN if [ "$COPYLEFT_SOURCES" = "true" ]; then \
@@ -127,4 +132,13 @@ USER $TIMESERIES_USER_NAME
 # Simple healthcheck to verify container is running
 HEALTHCHECK --interval=5m CMD exit 0
 
-ENTRYPOINT ["python", "main.py"]
+# Optional CPU core pinning behavior:
+# - Set CORE_PINNING to control which CPU cores the service should prefer.
+# - Supported values:
+#     * "e-cores"  : prefer efficiency cores
+#     * "p-cores"  : prefer performance cores
+#     * "lp-cores" : prefer low-power cores (if available)
+# - If CORE_PINNING is unset or empty, no explicit core pinning policy is applied.
+# The run.sh script uses detect-cores.sh together with CORE_PINNING (if set)
+# to determine and apply the appropriate core affinity at container startup.
+ENTRYPOINT ["./run.sh"]
