@@ -249,6 +249,9 @@ class Config(BaseModel):
         description="Cache size parameter (applies to relevant plugins)"
     )
     
+    # Ultralytics INT8 quantization
+    quantize: Optional[str] = None  # quantization dataset (for example: coco) used to enable INT8 export
+
     # Other plugin-specific common parameters
     model_group_id: Optional[str] = None
     export_type: Optional[str] = Field(None, description="For Geti: 'base' or 'optimized'")
@@ -286,7 +289,6 @@ class ModelRequest(BaseModel):
     type: Optional[ModelType] = None
     is_ovms: bool = False
     revision: Optional[str] = None
-    quantize: Optional[str] = None # Ultralytics quantization dataset (for example: coco) used to enable INT8 export
     config: Optional[Config] = None
 
 

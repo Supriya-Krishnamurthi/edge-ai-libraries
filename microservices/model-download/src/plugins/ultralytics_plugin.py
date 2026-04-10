@@ -41,7 +41,8 @@ class UltralyticsDownloader(ModelDownloadPlugin):
         #model_without_prefix = model_name.split(":")[-1] if ":" in model_name else model_name
         
         # Extract quantization from kwargs
-        quantize = kwargs.get("quantize", "").strip()
+        quantize = (kwargs.get("config") or {}).get("quantize") or ""
+        quantize = quantize.strip()
         int8_requested = bool(quantize)
 
         # Validate: INT8 quantization requires single model (not comma-separated, all, or yolo_all)
@@ -49,9 +50,8 @@ class UltralyticsDownloader(ModelDownloadPlugin):
             is_multi_model_in_request = "," in model_name or model_name in ("all", "yolo_all")
             if is_multi_model_in_request:
                 raise ValueError(
-                    f"INT8 quantization with dataset '{quantize}' requires a single model name."
-                    f"Received: '{model_name}'. "
-                    "Use a specific model and retry (e.g., 'yolov8n' instead of 'comma-separated-models', 'all', or 'yolo_all')."
+                    f"INT8 requires a single model. Received '{model_name}' with quantize='{quantize}'. "
+                    "Use a single model and retry (e.g., 'yolov8n' instead of 'comma-separated-models', 'all', or 'yolo_all')."
                 )
         
         # Create hub-specific directory under the output directory
@@ -59,25 +59,22 @@ class UltralyticsDownloader(ModelDownloadPlugin):
         
         # Call the download script
         return_code = self._call_bash_script(model=model_name, quantize=quantize, models_path=hub_dir)
-        missing_int8_artifacts = False
 
         if int8_requested and return_code == 0:
             int8_artifacts = self._find_int8_artifacts(hub_dir, model_name)
             if not int8_artifacts:
-                missing_int8_artifacts = True
-                return_code = 1
+                self._cleanup_requested_model_artifacts(hub_dir, model_name)
+                raise RuntimeError(
+                    f"INT8 export not supported for '{model_name}' (dataset='{quantize}'). "
+                    "No INT8 artifacts were generated."
+                )
 
         if return_code != 0:
             if int8_requested:
                 self._cleanup_requested_model_artifacts(hub_dir, model_name)
-                if missing_int8_artifacts:
-                    raise RuntimeError(
-                        f"INT8 download attempt failed for Ultralytics model '{model_name}' using dataset '{quantize}'. "
-                        "No INT8 artifacts were produced. Please retry without the quantize parameter for FP16/FP32 download."
-                    )
                 raise RuntimeError(
-                    f"INT8 download attempt failed for Ultralytics model '{model_name}' using dataset '{quantize}'. "
-                    "Please retry without the quantize parameter for FP16/FP32 download."
+                    f"INT8 download attempt failed for Ultralytics model '{model_name}' using dataset '{quantize}' "
+                    f"(script exit code: {return_code}).Check whether this model supports INT8 export, or retry without quantize."
                 )
             raise RuntimeError(f"Failed to download Ultralytics model {model_name}. Check if the model name is correct and if the model is compatible")
         

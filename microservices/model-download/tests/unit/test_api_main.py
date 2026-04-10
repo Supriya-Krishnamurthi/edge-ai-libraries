@@ -186,7 +186,7 @@ class TestAPIMain:
                     "hub": "ultralytics",
                     "type": "vision",
                     "is_ovms": False,
-                    "quantize": "coco"
+                    "config": {"quantize": "coco128"}
                 }
             ]
         }
@@ -196,13 +196,13 @@ class TestAPIMain:
         assert response.status_code == 200
         assert mock_manager.process_download.call_count == 1
         call_kwargs = mock_manager.process_download.call_args.kwargs
-        assert call_kwargs.get("quantize") == "coco"
+        assert call_kwargs.get("config", {}).get("quantize") == "coco"
 
     @patch('src.api.main.model_manager')
     @patch('src.api.main.plugin_registry')
     @patch('os.getenv')
-    def test_quantize_not_forwarded_for_non_ultralytics(self, mock_getenv, mock_registry, mock_manager, client):
-        """Test quantize request parameter is stripped for non-Ultralytics downloads."""
+    def test_quantize_inside_config_forwarded_for_all_hubs(self, mock_getenv, mock_registry, mock_manager, client):
+        """Test quantize inside config is forwarded as-is; non-Ultralytics plugins simply ignore it."""
         mock_getenv.side_effect = lambda key, default=None: {
             "HF_TOKEN": "test_hf_token",
             "MODELS_DIR": "/opt/models"
@@ -221,7 +221,7 @@ class TestAPIMain:
                     "hub": "huggingface",
                     "type": "llm",
                     "is_ovms": False,
-                    "quantize": "coco"
+                    "config": {"quantize": "coco128"}
                 }
             ]
         }
@@ -231,7 +231,7 @@ class TestAPIMain:
         assert response.status_code == 200
         assert mock_manager.process_download.call_count == 1
         call_kwargs = mock_manager.process_download.call_args.kwargs
-        assert "quantize" not in call_kwargs
+        assert call_kwargs.get("config", {}).get("quantize") == "coco128"
 
     @patch('src.api.main.model_manager')
     @patch('src.api.main.plugin_registry')

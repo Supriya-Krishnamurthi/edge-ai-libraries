@@ -207,7 +207,7 @@ SUPPORTED_QUANTIZATION_DATASETS=(
         result = ultralytics_plugin.download(
             model_name="yolov8n.pt",
             output_dir=temp_dir,
-            quantize="coco"
+            config={"quantize": "coco128"}
         )
 
         expected_hub_dir = os.path.join(temp_dir, "ultralytics")
@@ -235,7 +235,7 @@ SUPPORTED_QUANTIZATION_DATASETS=(
             ultralytics_plugin.download(
                 model_name="ch_PP-OCRv4_rec_infer",
                 output_dir=temp_dir,
-                quantize="coco128"
+                config={"quantize": "coco128"}
             )
 
         expected_hub_dir = os.path.join(temp_dir, "ultralytics")
@@ -262,7 +262,7 @@ SUPPORTED_QUANTIZATION_DATASETS=(
             ultralytics_plugin.download(
                 model_name="yolov8n.pt",
                 output_dir=temp_dir,
-                quantize="coco128"
+                config={"quantize": "coco128"}
             )
 
         assert "retry without the quantize parameter" in str(exc_info.value)
@@ -333,7 +333,7 @@ SUPPORTED_QUANTIZATION_DATASETS=(
             ultralytics_plugin.download(
                 model_name="yolov8n.pt,yolov8s.pt",
                 output_dir=temp_dir,
-                quantize="coco"
+                config={"quantize": "coco128"}
             )
 
         error_msg = str(exc_info.value)
@@ -347,7 +347,7 @@ SUPPORTED_QUANTIZATION_DATASETS=(
             ultralytics_plugin.download(
                 model_name="all",
                 output_dir=temp_dir,
-                quantize="coco"
+                config={"quantize": "coco128"}
             )
 
         error_msg = str(exc_info.value)
@@ -361,7 +361,7 @@ SUPPORTED_QUANTIZATION_DATASETS=(
             ultralytics_plugin.download(
                 model_name="yolo_all",
                 output_dir=temp_dir,
-                quantize="coco128"
+                config={"quantize": "coco128"}
             )
 
         error_msg = str(exc_info.value)
@@ -380,7 +380,7 @@ SUPPORTED_QUANTIZATION_DATASETS=(
         result = ultralytics_plugin.download(
             model_name="yolov8n.pt",
             output_dir=temp_dir,
-            quantize="coco"
+            config={"quantize": "coco128"}
         )
 
         assert result["int8_requested"] == True

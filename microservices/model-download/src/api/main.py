@@ -126,8 +126,6 @@ async def download_models(
                 # Remove fields that shouldn't be passed to plugins
                 extra_kwargs.pop("hub", None)
                 extra_kwargs.pop("is_ovms", None)
-                if model.hub.lower() != ModelHub.ULTRALYTICS.value.lower():
-                    extra_kwargs.pop("quantize", None)
                 
                 model_download_path = os.path.join(
                     models_dir, download_path
