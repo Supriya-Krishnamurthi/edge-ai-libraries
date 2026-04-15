@@ -2,10 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import re
+import io
+import zipfile
+import shutil
 import yaml
 import asyncio
-from typing import Dict, Any
-from fastapi import FastAPI, HTTPException
+from datetime import datetime
+from typing import Dict, Any, Optional
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
@@ -43,6 +48,9 @@ plugins_package = importlib.import_module("src.plugins")
 plugin_registry.discover_plugins(plugins_package)
 models_dir = os.getenv("MODELS_DIR", "/opt/models")
 model_manager = ModelManager(plugin_registry, default_dir=models_dir)
+
+MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", "500")) * 1024 * 1024
+CUSTOM_MODELS_SUBDIR = "custom_uploaded_models"
 
 # Log which plugins are activated at startup
 for plugin_type in plugin_registry.plugins:
@@ -275,16 +283,21 @@ async def get_model_results():
     for job_id, job in model_manager._jobs.items():
         if job.get("status") == "completed":
             # Format job as result
+            operation_type = job.get("operation_type")
             result = {
                 "job_id": job_id,
                 "model_name": job.get("model_name"),
                 "hub": job.get("hub"),
-                "operation_type": job.get("operation_type"),
+                "operation_type": operation_type,
                 "status": "success",
                 "model_path": job.get("output_dir"),
-                "is_ovms": job.get("operation_type") == "convert",
                 "completion_time": job.get("completion_time")
             }
+
+            # Keep is_ovms for for download/convert responses and omit for upload responses as upload is user-initiated
+            if operation_type != "upload":
+                result["is_ovms"] = operation_type == "convert"
+
             completed_jobs.append(result)
     
     return {"results": completed_jobs}
@@ -339,4 +352,105 @@ async def list_plugins():
         "total_count": total_plugins,
         "available_count": available_plugins,
         "activation_instructions": "To enable/disable plugins, restart the container with the --plugins option specifying the plugins you need (e.g. huggingface,openvino,ultralytics,ollama) or use 'all' to enable all plugins"
+    }
+
+
+@app.post("/models/upload", tags=["Models"])
+async def upload_model(
+    file: UploadFile = File(...),
+    model_name: str = Form(...),
+    provider: str = Form("geti"),
+    framework: str = Form("openvino"),
+    precision: Optional[str] = Form("FP16"),
+):
+    """
+    Upload an OpenVINO IR model as a ZIP file containing model.xml and model.bin.
+    The uploaded model is immediately visible in GET /models/results.
+    Storage path: {MODELS_DIR}/custom_uploaded_models/{provider}/{framework}/{model_name}/[{precision}/]
+    """
+    # Read full content into memory for size check
+    content = await file.read()
+
+    # Enforce size limit (default 500MB)
+    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File size {len(content)} bytes exceeds the "
+                f"{MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB upload limit."
+            ),
+        )
+
+    # Validate it is a ZIP archive
+    if not zipfile.is_zipfile(io.BytesIO(content)):
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file is not a valid ZIP archive.",
+        )
+
+    # Validate ZIP contains at least one .xml and one .bin
+    with zipfile.ZipFile(io.BytesIO(content)) as zf:
+        names = zf.namelist()
+        has_xml = any(n.lower().endswith(".xml") for n in names)
+        has_bin = any(n.lower().endswith(".bin") for n in names)
+        if not has_xml or not has_bin:
+            raise HTTPException(
+                status_code=400,
+                detail="ZIP must contain at least one .xml and one .bin file (OpenVINO IR format).",
+            )
+
+    # Sanitize model_name: lowercase, spaces → underscore, strip special chars
+    sanitized_name = model_name.strip().lower()
+    sanitized_name = sanitized_name.replace(" ", "_")
+    sanitized_name = re.sub(r"[^a-z0-9_\-]", "", sanitized_name)
+    if not sanitized_name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"model_name is empty or invalid after sanitization: {sanitized_name}",
+        )
+
+    # Build target directory path
+    path_parts = [models_dir, CUSTOM_MODELS_SUBDIR, provider, framework, sanitized_name]
+    if precision:
+        path_parts.append(precision)
+    target_dir = os.path.join(*path_parts)
+
+    # Reject duplicate model
+    if os.path.exists(target_dir):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Model '{sanitized_name}' already exists at '{target_dir}'.",
+        )
+
+    # Extract ZIP to target directory
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            zf.extractall(target_dir)
+    except Exception as e:
+        shutil.rmtree(target_dir, ignore_errors=True)
+        logger.error(f"Failed to extract uploaded model '{sanitized_name}': {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to extract model: {str(e)}",
+        )
+
+    # Register as a completed job so it appears in GET /models/results
+    job_id = model_manager.register_job(
+        operation_type="upload",
+        model_name=sanitized_name,
+        hub="user-uploaded",
+        output_dir=target_dir,
+    )
+    model_manager._jobs[job_id]["status"] = "completed"
+    model_manager._jobs[job_id]["completion_time"] = datetime.now().isoformat()
+
+    logger.info(f"Model '{sanitized_name}' uploaded successfully to '{target_dir}' (job_id={job_id})")
+
+    return {
+        "status": "success",
+        "message": f"Model '{sanitized_name}' uploaded successfully.",
+        "job_id": job_id,
+        "model_name": sanitized_name,
+        "model_path": target_dir,
     }
