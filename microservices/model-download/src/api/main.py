@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-import re
 import io
 import zipfile
 import shutil
@@ -19,6 +18,7 @@ from ..core.model_manager import ModelManager
 import importlib
 from .models import ModelDownloadRequest, ModelHub
 from ..utils.logging import logger
+from ..utils.helper import validate_zip_contents_within_target, validate_zip_file, sanitize_path_part
 
 app = FastAPI(
     root_path="/api/v1",
@@ -380,56 +380,50 @@ async def upload_model(
                 f"{MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB upload limit."
             ),
         )
-
-    # Validate it is a ZIP archive
-    if not zipfile.is_zipfile(io.BytesIO(content)):
-        raise HTTPException(
-            status_code=400,
-            detail="Uploaded file is not a valid ZIP archive.",
-        )
-
-    # Validate ZIP contains at least one .xml and one .bin
-    with zipfile.ZipFile(io.BytesIO(content)) as zf:
-        names = zf.namelist()
-        has_xml = any(n.lower().endswith(".xml") for n in names)
-        has_bin = any(n.lower().endswith(".bin") for n in names)
-        if not has_xml or not has_bin:
-            raise HTTPException(
-                status_code=400,
-                detail="ZIP must contain at least one .xml and one .bin file (OpenVINO IR format).",
-            )
-
-    # Sanitize model_name: lowercase, spaces → underscore, strip special chars
-    sanitized_name = model_name.strip().lower()
-    sanitized_name = sanitized_name.replace(" ", "_")
-    sanitized_name = re.sub(r"[^a-z0-9_\-]", "", sanitized_name)
-    if not sanitized_name:
-        raise HTTPException(
-            status_code=400,
-            detail=f"model_name is empty or invalid after sanitization: {sanitized_name}",
-        )
+    # check if it's a valid ZIP file
+    validate_zip_file(content)
 
     # Build target directory path
-    path_parts = [models_dir, CUSTOM_MODELS_SUBDIR, provider, framework, sanitized_name]
+    upload_base_dir = os.path.abspath(os.path.join(models_dir, CUSTOM_MODELS_SUBDIR))
+    sanitized_model_name = sanitize_path_part(model_name, "model_name")
+    path_parts = [
+        upload_base_dir,
+        sanitize_path_part(provider, "provider"),
+        sanitize_path_part(framework, "framework"),
+        sanitized_model_name,
+    ]
     if precision:
-        path_parts.append(precision)
-    target_dir = os.path.join(*path_parts)
+        path_parts.append(sanitize_path_part(precision, "precision"))
+    target_dir = os.path.abspath(os.path.join(*path_parts))
+
+    if os.path.commonpath([upload_base_dir, target_dir]) != upload_base_dir:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid upload path. Target directory must stay under custom_uploaded_models.",
+        )
 
     # Reject duplicate model
     if os.path.exists(target_dir):
         raise HTTPException(
             status_code=409,
-            detail=f"Model '{sanitized_name}' already exists at '{target_dir}'.",
+            detail=(
+                f"Model '{sanitized_model_name}' already exists at '{target_dir}'."
+            ),
         )
 
     # Extract ZIP to target directory
     try:
         os.makedirs(target_dir, exist_ok=True)
         with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            validate_zip_contents_within_target(zf, target_dir)
             zf.extractall(target_dir)
+    except ValueError as e:
+        shutil.rmtree(target_dir, ignore_errors=True)
+        logger.error(f"ZIP validation failed for model '{sanitized_model_name}': {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         shutil.rmtree(target_dir, ignore_errors=True)
-        logger.error(f"Failed to extract uploaded model '{sanitized_name}': {str(e)}")
+        logger.error(f"Failed to extract uploaded model '{sanitized_model_name}': {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to extract model: {str(e)}",
@@ -438,19 +432,19 @@ async def upload_model(
     # Register as a completed job so it appears in GET /models/results
     job_id = model_manager.register_job(
         operation_type="upload",
-        model_name=sanitized_name,
+        model_name=sanitized_model_name,
         hub="user-uploaded",
         output_dir=target_dir,
     )
     model_manager._jobs[job_id]["status"] = "completed"
     model_manager._jobs[job_id]["completion_time"] = datetime.now().isoformat()
 
-    logger.info(f"Model '{sanitized_name}' uploaded successfully to '{target_dir}' (job_id={job_id})")
+    logger.info(f"Model '{sanitized_model_name}' uploaded successfully to '{target_dir}' (job_id={job_id})")
 
     return {
         "status": "success",
-        "message": f"Model '{sanitized_name}' uploaded successfully.",
+        "message": f"Model '{sanitized_model_name}' uploaded successfully.",
         "job_id": job_id,
-        "model_name": sanitized_name,
+        "model_name": sanitized_model_name,
         "model_path": target_dir,
     }
