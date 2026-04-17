@@ -214,6 +214,9 @@ curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=yolo_in
 > - INT8 requests only support a single model name per request. Requests using comma-separated model names, `all`, or `yolo_all` with `quantize` are rejected.
 > - If INT8 is requested but no INT8 artifact is produced, the request fails and partial artifacts are cleaned up.
 > - Due to a limitation in the DL Streamer public model download script, requesting INT8 also downloads other supported precision artifacts for the model if present like FP32, FP16.
+> - Currently available datasets are coco, coco8 and coco128.
+
+**NOTE:** coco is a very large dataset of over 20GB and containing more than a 100,000 images. Quantization on this dataset can take a very long time. For development purposes, it is recommended to use coco128 or coco8 instead, which is much lighter.
 
 **Download a Hugging Face model and convert it to OpenVINO IR format:**
 
