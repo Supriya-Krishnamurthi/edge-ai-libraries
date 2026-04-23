@@ -24,6 +24,24 @@ def _reload_models_module(supported_models_file: str, models_path: str):
 
 
 class TestModels(unittest.TestCase):
+    def _create_genai_required_files(self, model_dir: Path) -> None:
+        required_files = [
+            "openvino_tokenizer.xml",
+            "openvino_tokenizer.bin",
+            "openvino_detokenizer.xml",
+            "openvino_detokenizer.bin",
+            "openvino_vision_embeddings_model.xml",
+            "openvino_vision_embeddings_model.bin",
+            "openvino_text_embeddings_model.xml",
+            "openvino_text_embeddings_model.bin",
+            "openvino_language_model.xml",
+            "openvino_language_model.bin",
+            "openvino_config.json",
+            "config.json",
+        ]
+        for filename in required_files:
+            (model_dir / filename).write_text("x")
+
     def test_supported_model_paths_and_exists(self):
         """Test SupportedModel path and model_proc resolution and exists_on_disk."""
         with tempfile.TemporaryDirectory() as td:
@@ -441,6 +459,73 @@ class TestModels(unittest.TestCase):
             # Test singleton behavior - second call returns same instance
             mgr2 = m.SupportedModelsManager()
             self.assertIs(mgr, mgr2)
+
+    def test_genai_model_exists_on_disk_requires_full_directory_assets(self):
+        """GenAI model should be considered installed only when all required runtime files exist."""
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            models_dir = td_path / "models"
+            model_dir = models_dir / "genai" / "gemma3"
+            model_dir.mkdir(parents=True)
+
+            yaml_file = td_path / "supported.yaml"
+            yaml_file.write_text("[]")
+
+            m = _reload_models_module(str(yaml_file), str(models_dir))
+
+            genai_model = m.SupportedModel(
+                name="gemma3",
+                display_name="Gemma 3",
+                source="huggingface",
+                model_type="genai",
+                model_path="genai/gemma3",
+                model_proc="",
+            )
+
+            self.assertFalse(genai_model.exists_on_disk())
+
+            self._create_genai_required_files(model_dir)
+            self.assertTrue(genai_model.exists_on_disk())
+
+            # Remove one required file and verify it is no longer considered installed.
+            (model_dir / "openvino_language_model.bin").unlink()
+            self.assertFalse(genai_model.exists_on_disk())
+
+    def test_find_installed_model_by_model_and_proc_path_for_genai_directory(self):
+        """Directory-based GenAI model path should map to the configured model entry."""
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            models_dir = td_path / "models"
+            model_dir = models_dir / "genai" / "gemma3"
+            model_dir.mkdir(parents=True)
+            self._create_genai_required_files(model_dir)
+
+            yaml_file = td_path / "supported.yaml"
+            yaml_file.write_text(
+                """
+- name: gemma3
+  display_name: Gemma 3
+  source: huggingface
+  type: genai
+  unsupported_devices: ""
+  default: false
+  precisions:
+    - precision: INT8
+      model_path: genai/gemma3/
+      model_proc: ""
+"""
+            )
+
+            m = _reload_models_module(str(yaml_file), str(models_dir))
+            if hasattr(m, "_supported_models_manager_instance"):
+                setattr(m, "_supported_models_manager_instance", None)
+
+            manager = m.SupportedModelsManager()
+            found = manager.find_installed_model_by_model_and_proc_path(str(model_dir))
+
+            self.assertIsNotNone(found)
+            self.assertEqual(found.name, "gemma3")
+            self.assertEqual(found.model_type, "genai")
 
 
 if __name__ == "__main__":

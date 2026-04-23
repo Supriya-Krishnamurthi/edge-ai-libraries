@@ -88,6 +88,7 @@ const nodeTypeToTag: Record<string, string> = {
   gvadetect: "Detection",
   gvaclassify: "Classification",
   gvainference: "Inference",
+  gvagenai: "GenAI",
   gvatrack: "Tracking",
   gvawatermark: "Overlay",
   gvametaconvert: "Converter",

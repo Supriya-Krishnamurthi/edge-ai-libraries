@@ -52,7 +52,7 @@ class SupportedModel:
         self.display_name: str = display_name
         self.source: str = source
         self.model_type: str = model_type
-        self.model_path: str = model_path
+        self.model_path: str = os.path.normpath(model_path)
         self.model_proc: str | None = model_proc
         self.unsupported_devices: str | None = unsupported_devices
         self.precision: str | None = precision
@@ -74,9 +74,35 @@ class SupportedModel:
         """
         Checks if the model exists on disk.
 
+        For `genai` models, `model_path` is expected to be a directory that
+        contains the core OpenVINO GenAI runtime assets.
+
         Returns:
             bool: True if the model exists, False otherwise.
         """
+        if self.model_type == "genai":
+            if not os.path.isdir(self.model_path_full):
+                return False
+
+            required_files = [
+                "openvino_tokenizer.xml",
+                "openvino_tokenizer.bin",
+                "openvino_detokenizer.xml",
+                "openvino_detokenizer.bin",
+                "openvino_vision_embeddings_model.xml",
+                "openvino_vision_embeddings_model.bin",
+                "openvino_text_embeddings_model.xml",
+                "openvino_text_embeddings_model.bin",
+                "openvino_language_model.xml",
+                "openvino_language_model.bin",
+                "openvino_config.json",
+                "config.json",
+            ]
+            return all(
+                os.path.isfile(os.path.join(self.model_path_full, required))
+                for required in required_files
+            )
+
         return os.path.isfile(self.model_path_full)
 
 
@@ -426,11 +452,22 @@ class SupportedModelsManager:
         Returns:
             Optional[SupportedModel]: The installed SupportedModel instance if found, otherwise None.
         """
+        normalized_model_path = os.path.normpath(model_path)
+
+        # First, try exact full-path match for directory-based GenAI models.
+        for model in self._models:
+            if (
+                model.model_type == "genai"
+                and model.exists_on_disk()
+                and os.path.normpath(model.model_path_full) == normalized_model_path
+            ):
+                return model
+
         # Extract the model filename and precision directory from the provided path.
         # Model paths follow the pattern: .../precision_dir/filename.xml
         # e.g. /models/output/public/yolov10s/INT8/yolov10s.xml  -> precision_dir = 'INT8'
-        model_filename = os.path.basename(model_path)
-        model_precision_dir = os.path.basename(os.path.dirname(model_path))
+        model_filename = os.path.basename(normalized_model_path)
+        model_precision_dir = os.path.basename(os.path.dirname(normalized_model_path))
 
         # Step 1: find all installed models matching the filename
         matching_models = [

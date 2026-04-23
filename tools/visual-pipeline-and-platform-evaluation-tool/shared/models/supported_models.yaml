@@ -280,3 +280,15 @@
   extra_model_procs: []
   unsupported_devices: ""
   default: true
+
+- name: gemma3
+  display_name: Gemma 3
+  source: huggingface
+  type: genai
+  precisions:
+    - precision: INT8
+      model_path: openvino_models/cpu/INT8/google/gemma-3-4b-it/
+      model_proc: ""
+  extra_model_procs: []
+  unsupported_devices: ""
+  default: false
