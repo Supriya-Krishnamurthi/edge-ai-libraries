@@ -1,8 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
-import { getHandleLeftPosition } from "../utils/graphLayout";
 import { usePipelineEditorContext } from "../PipelineEditorContext.ts";
 
-export const GVAGenAINodeWidth = 300;
+export const GVAGenAINodeWidth = 280;
 
 type GVAGenAINodeProps = {
   data: {
@@ -10,6 +9,9 @@ type GVAGenAINodeProps = {
     device?: string;
     "frame-rate"?: string;
     "chunk-size"?: string;
+    prompt?: string;
+    "generation-config"?: string;
+    metrics?: string;
   };
 };
 
@@ -18,7 +20,7 @@ const GVAGenAINode = ({ data }: GVAGenAINodeProps) => {
   const modelValue = data.model || "";
 
   return (
-    <div className="p-4 rounded shadow-md bg-background border border-l-4 border-l-teal-400 min-w-[300px]">
+    <div className="p-4 rounded shadow-md bg-background border border-l-4 border-l-teal-400 min-w-[280px]">
       <div className="flex gap-3">
         <div className="shrink-0 w-10 h-10 rounded bg-teal-100 dark:bg-teal-900 flex items-center justify-center self-center">
           <svg
@@ -38,7 +40,7 @@ const GVAGenAINode = ({ data }: GVAGenAINodeProps) => {
 
         <div className="flex-1 flex flex-col">
           <div className="text-xl font-bold text-teal-700 dark:text-teal-300">
-            {simpleGraph ? "Video Summarization" : "GVAGenAI"}
+            {simpleGraph ? "Video Summarization VLM" : "GVAGenAI"}
           </div>
 
           <div className="flex items-center gap-1 flex-wrap text-xs text-gray-700 dark:text-gray-300">
@@ -53,7 +55,7 @@ const GVAGenAINode = ({ data }: GVAGenAINodeProps) => {
               </>
             )}
 
-            {data["frame-rate"] && (
+            {data["frame-rate"] !== undefined && (
               <>
                 {(data.device || modelValue) && (
                   <span className="text-gray-400">•</span>
@@ -62,14 +64,15 @@ const GVAGenAINode = ({ data }: GVAGenAINodeProps) => {
               </>
             )}
 
-            {data["chunk-size"] && (
+            {data["chunk-size"] !== undefined && (
               <>
-                {(data.device || modelValue || data["frame-rate"]) && (
+                {(data.device || modelValue || data["frame-rate"] !== undefined) && (
                   <span className="text-gray-400">•</span>
                 )}
                 <span>chunk: {data["chunk-size"]}</span>
               </>
             )}
+
           </div>
         </div>
       </div>
@@ -78,14 +81,12 @@ const GVAGenAINode = ({ data }: GVAGenAINodeProps) => {
         type="target"
         position={Position.Top}
         className="w-3 h-3 bg-teal-500!"
-        style={{ left: getHandleLeftPosition("gvagenai") }}
       />
 
       <Handle
         type="source"
         position={Position.Bottom}
         className="w-3 h-3 bg-teal-500!"
-        style={{ left: getHandleLeftPosition("gvagenai") }}
       />
     </div>
   );

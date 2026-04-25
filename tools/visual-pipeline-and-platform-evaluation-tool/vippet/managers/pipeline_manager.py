@@ -573,18 +573,23 @@ class PipelineManager:
 
                 if output_mode != InternalOutputMode.DISABLED and stream_index == 0:
                     # Replace the main output placeholder with the actual output subpipeline (file or live stream)
+                    # For gvagenai pipelines, there may be no placeholder (unnamed fakesink for metadata-only)
                     if OUTPUT_PLACEHOLDER not in unique_pipeline_str:
-                        raise ValueError(
-                            f"Pipeline '{pipeline_name}' (id: {pipeline_id}) is missing required output sink. "
-                            f"Please add 'fakesink name=default_output_sink' at the end of the pipeline definition."
+                        has_gvagenai = any(n.type == "gvagenai" for n in graph_instance.nodes)
+                        if not has_gvagenai:
+                            raise ValueError(
+                                f"Pipeline '{pipeline_name}' (id: {pipeline_id}) is missing required output sink. "
+                                f"Please add 'fakesink name=default_output_sink' at the end of the pipeline definition."
+                            )
+                        logger.debug(f"gvagenai pipeline detected with unnamed fakesink. Skipping output injection.")
+                    else:
+                        if output_subpipeline is None:
+                            raise ValueError(
+                                "Output subpipeline was not created as expected."
+                            )
+                        unique_pipeline_str = unique_pipeline_str.replace(
+                            OUTPUT_PLACEHOLDER, output_subpipeline
                         )
-                    if output_subpipeline is None:
-                        raise ValueError(
-                            "Output subpipeline was not created as expected."
-                        )
-                    unique_pipeline_str = unique_pipeline_str.replace(
-                        OUTPUT_PLACEHOLDER, output_subpipeline
-                    )
 
                 pipeline_parts.append(unique_pipeline_str)
 

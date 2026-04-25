@@ -12,15 +12,16 @@ variants:
       videoconvert !
       video/x-raw,format=RGB !
       gvagenai
-        model=/models/output/openvino_models/cpu/INT8/google/gemma-3-4b-it
+        model-path=/models/output/openvino_models/cpu/INT4/google/gemma-3-4b-it
         device=CPU
         prompt="Summarize this video in one sentence."
         generation-config="max_new_tokens=64"
         frame-rate=1
         chunk-size=4
         metrics=false !
-      gvametapublish method=file file-format=json-lines file-path=/dev/null !
-      fakesink name=default_output_sink sync=false async=false
+      gvafpscounter starting-frame=100 !
+      gvametapublish method=file file-format=json-lines file-path=/videos/output/summary.jsonl !
+      fakesink sync=false async=false
   - name: GPU
     pipeline_description: >-
       filesrc location=/videos/input/people.mp4 !
@@ -28,15 +29,16 @@ variants:
       videoconvert !
       video/x-raw,format=RGB !
       gvagenai
-        model=/models/output/openvino_models/gpu/INT8/google/gemma-3-4b-it
+        model-path=/models/output/openvino_models/gpu/INT4/google/gemma-3-4b-it
         device=GPU
         prompt="Summarize this video in one sentence."
         generation-config="max_new_tokens=64"
         frame-rate=1
         chunk-size=4
         metrics=false !
-      gvametapublish method=file file-format=json-lines file-path=/dev/null !
-      fakesink name=default_output_sink sync=false async=false
+      gvafpscounter starting-frame=100 !
+      gvametapublish method=file file-format=json-lines file-path=/videos/output/summary.jsonl !
+      fakesink sync=false async=false
   - name: NPU
     pipeline_description: >-
       filesrc location=/videos/input/people.mp4 !
@@ -44,12 +46,13 @@ variants:
       videoconvert !
       video/x-raw,format=RGB !
       gvagenai
-        model=/models/output/openvino_models/npu/INT8/google/gemma-3-4b-it
+        model-path=/models/output/openvino_models/npu/INT4/google/gemma-3-4b-it
         device=NPU
         prompt="Summarize this video in one sentence."
         generation-config="max_new_tokens=64"
         frame-rate=1
         chunk-size=4
         metrics=false !
-      gvametapublish method=file file-format=json-lines file-path=/dev/null !
-      fakesink name=default_output_sink sync=false async=false
+      gvafpscounter starting-frame=100 !
+      gvametapublish method=file file-format=json-lines file-path=/videos/output/summary.jsonl !
+      fakesink sync=false async=false

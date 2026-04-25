@@ -453,13 +453,12 @@ class SupportedModelsManager:
             Optional[SupportedModel]: The installed SupportedModel instance if found, otherwise None.
         """
         normalized_model_path = os.path.normpath(model_path)
-
-        # First, try exact full-path match for directory-based GenAI models.
+        # Compare with trailing-slash stripped (pipeline descriptions may omit the slash).
         for model in self._models:
             if (
                 model.model_type == "genai"
                 and model.exists_on_disk()
-                and os.path.normpath(model.model_path_full) == normalized_model_path
+                and os.path.normpath(model.model_path_full).rstrip("/") == normalized_model_path.rstrip("/")
             ):
                 return model
 

@@ -286,8 +286,8 @@
   source: huggingface
   type: genai
   precisions:
-    - precision: INT8
-      model_path: openvino_models/cpu/INT8/google/gemma-3-4b-it/
+    - precision: INT4
+      model_path: openvino_models/cpu/INT4/google/gemma-3-4b-it/
       model_proc: ""
   extra_model_procs: []
   unsupported_devices: ""
