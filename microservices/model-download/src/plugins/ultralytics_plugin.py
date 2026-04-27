@@ -3,6 +3,7 @@
 
 import os
 import shutil
+import threading
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, List
@@ -13,6 +14,8 @@ from src.utils.logging import logger
 class UltralyticsDownloader(ModelDownloadPlugin):
     """Plugin for downloading Ultralytics models"""
     
+    _script_lock = threading.Lock()
+
     @property
     def plugin_name(self) -> str:
         return "ultralytics"
@@ -58,7 +61,17 @@ class UltralyticsDownloader(ModelDownloadPlugin):
         hub_dir = os.path.join(output_dir, "ultralytics")
         
         # Call the download script
-        return_code = self._call_bash_script(model=model_name, quantize=quantize, models_path=hub_dir)
+        with self._script_lock:
+            return_code = self._call_bash_script(model=model_name, quantize=quantize, models_path=hub_dir)
+
+        if int8_requested and return_code == 0:
+            int8_artifacts = self._find_int8_artifacts(hub_dir, model_name)
+            if not int8_artifacts:
+                self._cleanup_requested_model_artifacts(hub_dir, model_name)
+                raise RuntimeError(
+                    f"INT8 export not supported for '{model_name}' (dataset='{quantize}'). "
+                    "No INT8 artifacts were generated."
+                )
 
         if int8_requested and return_code == 0:
             int8_artifacts = self._find_int8_artifacts(hub_dir, model_name)
