@@ -603,6 +603,7 @@ paths:
         **Validation and behavior:**
         - `model_name` is required and sanitized to lowercase with safe characters
         - File size limit is enforced (default 500MB via `MAX_UPLOAD_SIZE_MB`)
+        - Files are read in chunks (default 8KB via `UPLOAD_CHUNK_SIZE_KB`) to prevent memory exhaustion with large uploads
         - If target model path already exists, the API returns `409`
         - Successful upload is registered as a completed job and appears in `/models/results`
       operationId: uploadModel

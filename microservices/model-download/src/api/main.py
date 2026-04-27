@@ -50,6 +50,7 @@ models_dir = os.getenv("MODELS_DIR", "/opt/models")
 model_manager = ModelManager(plugin_registry, default_dir=models_dir)
 
 MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", "500")) * 1024 * 1024
+UPLOAD_CHUNK_SIZE_BYTES = int(os.getenv("UPLOAD_CHUNK_SIZE_KB", "8")) * 1024
 CUSTOM_MODELS_SUBDIR = "custom_uploaded_models"
 
 # Log which plugins are activated at startup
@@ -368,18 +369,38 @@ async def upload_model(
     The uploaded model is immediately visible in GET /models/results.
     Storage path: {MODELS_DIR}/custom_uploaded_models/{provider}/{framework}/{model_name}/[{precision}/]
     """
-    # Read full content into memory for size check
-    content = await file.read()
-
-    # Enforce size limit (default 500MB)
-    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+    # Early size check using file metadata
+    if file.size and file.size > MAX_UPLOAD_SIZE_BYTES:
         raise HTTPException(
             status_code=413,
             detail=(
-                f"File size {len(content)} bytes exceeds the "
+                f"File size {file.size} bytes exceeds the "
                 f"{MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB upload limit."
             ),
         )
+
+    # Read file in chunks to prevent memory exhaustion with large uploads
+    chunk_size = UPLOAD_CHUNK_SIZE_BYTES
+    accumulated_size = 0
+    chunks = []
+
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+
+        accumulated_size += len(chunk)
+        if accumulated_size > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"File size exceeds the "
+                    f"{MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB upload limit."
+                ),
+            )
+        chunks.append(chunk)
+
+    content = b''.join(chunks)
     # check if it's a valid ZIP file
     validate_zip_file(content)
 

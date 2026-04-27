@@ -378,6 +378,7 @@ Environment Variables:
 - `HF_HUB_ENABLE_HF_TRANSFER`: Enable Hugging Face transfer (default: 1)
 - `HUGGINGFACEHUB_API_TOKEN`: Hugging Face token (only required for gated models or conversion)
 - `MAX_UPLOAD_SIZE_MB`: Maximum allowed upload ZIP size in MB (default: 500)
+- `UPLOAD_CHUNK_SIZE_KB`: Chunk size for streaming file uploads in KB (default: 8). Larger values improve throughput, smaller values reduce memory usage for concurrent uploads
 
 Volumes:
 
