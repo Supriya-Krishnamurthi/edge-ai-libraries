@@ -1994,6 +1994,102 @@ class VideoExistsResponse(BaseModel):
     )
 
 
+class ImageSet(BaseModel):
+    """
+    **Metadata for a single image set (directory of images).**
+
+    ## Attributes
+    - `name` - Name of the image set (directory name under INPUT_IMAGES_DIR)
+    - `image_count` - Number of image files in the directory
+
+    ### Example
+    ```json
+    {
+      "name": "traffic_dataset",
+      "image_count": 120
+    }
+    ```
+    """
+
+    name: str = Field(..., description="Name of the image set directory.")
+    image_count: int = Field(..., description="Number of image files in the directory.")
+
+
+class ImageSetExistsResponse(BaseModel):
+    """
+    **Response indicating whether an image set directory exists.**
+
+    ## Attributes
+    - `exists` - True if directory exists in INPUT_IMAGES_DIR, False otherwise
+    - `name` - The image set name that was checked
+
+    ### Example
+    ```json
+    {
+      "exists": true,
+      "name": "traffic_dataset"
+    }
+    ```
+    """
+
+    exists: bool = Field(
+        ...,
+        description="True if the image set directory exists, False otherwise.",
+    )
+    name: str = Field(
+        ...,
+        description="The image set name (directory) that was checked.",
+    )
+
+
+class ImageInfo(BaseModel):
+    """
+    **Metadata for a single image file inside an image set.**
+
+    ## Attributes
+    - `filename` - Relative path of the image inside the image set directory
+    - `extension` - Lowercase file extension (without leading dot)
+    - `size_bytes` - File size in bytes
+    - `width` - Image width in pixels (null if unreadable)
+    - `height` - Image height in pixels (null if unreadable)
+
+    ### Example
+    ```json
+    {
+      "filename": "frame_0001.jpg",
+      "extension": "jpg",
+      "size_bytes": 204812,
+      "width": 1920,
+      "height": 1080
+    }
+    ```
+    """
+
+    filename: str = Field(
+        ...,
+        description=(
+            "Filename of the image, relative to the image set root "
+            "(uses '/' as separator)."
+        ),
+    )
+    extension: str = Field(
+        ...,
+        description="Lowercase image file extension without the leading dot.",
+    )
+    size_bytes: int = Field(
+        ...,
+        description="Size of the image file in bytes.",
+    )
+    width: Optional[int] = Field(
+        None,
+        description="Image width in pixels, or null if it could not be read.",
+    )
+    height: Optional[int] = Field(
+        None,
+        description="Image height in pixels, or null if it could not be read.",
+    )
+
+
 class CameraDetails(BaseModel):
     """
     **Base class for camera-specific details.**
