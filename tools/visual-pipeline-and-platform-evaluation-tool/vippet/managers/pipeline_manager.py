@@ -691,7 +691,7 @@ class PipelineManager:
                                 f"Pipeline '{pipeline_name}' (id: {pipeline_id}) is missing required output sink. "
                                 f"Please add 'fakesink name=default_output_sink' at the end of the pipeline definition."
                             )
-                        logger.debug(f"gvagenai pipeline detected with unnamed fakesink. Skipping output injection.")
+                        logger.debug("gvagenai pipeline detected with unnamed fakesink. Skipping output injection.")
                     else:
                         if output_subpipeline is None:
                             raise ValueError(
