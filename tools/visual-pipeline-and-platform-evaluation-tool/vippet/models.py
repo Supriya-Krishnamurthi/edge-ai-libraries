@@ -458,7 +458,8 @@ class SupportedModelsManager:
             if (
                 model.model_type == "genai"
                 and model.exists_on_disk()
-                and os.path.normpath(model.model_path_full).rstrip("/") == normalized_model_path.rstrip("/")
+                and os.path.normpath(model.model_path_full).rstrip("/")
+                == normalized_model_path.rstrip("/")
             ):
                 return model
 

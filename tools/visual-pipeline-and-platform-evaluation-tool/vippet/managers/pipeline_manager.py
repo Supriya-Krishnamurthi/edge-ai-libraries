@@ -685,13 +685,17 @@ class PipelineManager:
                     # Replace the main output placeholder with the actual output subpipeline (file or live stream)
                     # For gvagenai pipelines, there may be no placeholder (unnamed fakesink for metadata-only)
                     if OUTPUT_PLACEHOLDER not in unique_pipeline_str:
-                        has_gvagenai = any(n.type == "gvagenai" for n in graph_instance.nodes)
+                        has_gvagenai = any(
+                            n.type == "gvagenai" for n in graph_instance.nodes
+                        )
                         if not has_gvagenai:
                             raise ValueError(
                                 f"Pipeline '{pipeline_name}' (id: {pipeline_id}) is missing required output sink. "
                                 f"Please add 'fakesink name=default_output_sink' at the end of the pipeline definition."
                             )
-                        logger.debug("gvagenai pipeline detected with unnamed fakesink. Skipping output injection.")
+                        logger.debug(
+                            "gvagenai pipeline detected with unnamed fakesink. Skipping output injection."
+                        )
                     else:
                         if output_subpipeline is None:
                             raise ValueError(

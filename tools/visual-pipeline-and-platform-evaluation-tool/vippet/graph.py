@@ -615,7 +615,9 @@ class Graph:
                 logger.debug(f"Converted node {node.id} to OUTPUT_PLACEHOLDER")
             elif has_gvagenai:
                 # gvagenai pipeline - metadata-only, keep unnamed fakesink as-is
-                logger.debug("gvagenai pipeline detected. Keeping unnamed fakesink for metadata output.")
+                logger.debug(
+                    "gvagenai pipeline detected. Keeping unnamed fakesink for metadata output."
+                )
             else:
                 # Multiple fakesinks - need explicit naming
                 raise ValueError(
@@ -2576,9 +2578,7 @@ def _build_chain(
             result_parts.append(node.type)
             for key, value in node.data.items():
                 output_key = (
-                    "model-path"
-                    if node.type == "gvagenai" and key == "model"
-                    else key
+                    "model-path" if node.type == "gvagenai" and key == "model" else key
                 )
                 result_parts.append(f"{output_key}={value}")
 
