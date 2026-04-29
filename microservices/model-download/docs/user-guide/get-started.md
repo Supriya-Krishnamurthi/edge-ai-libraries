@@ -294,6 +294,24 @@ curl -X POST 'http://<host-ip>:8200/api/v1/models/download?download_path=geti_fo
 
 > **Note:** The default precision is FP16.
 
+**Download a Pipeline Zoo model:**
+
+```bash
+curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=pipeline_zoo_models" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "models": [
+      {
+        "name": "dbnet",
+        "hub": "pipeline-zoo-models"
+      }
+    ],
+    "parallel_downloads": false
+  }'
+```
+
+> **Note:** You can pass `"name": "all"` to download all available models from the Pipeline Zoo `storage` directory.
+
 **Download fixed HLS models (3D pose, rPPG, AI-ECG):**
 ```bash
 curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=hls_assets" \

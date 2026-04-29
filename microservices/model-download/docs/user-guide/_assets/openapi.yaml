@@ -348,7 +348,7 @@ paths:
     post:
       summary: Download and optionally convert models
       description: |
-        Downloads one or more models from HuggingFace, Ollama, Ultralytics, hls or GETI and optionally converts them
+        Downloads one or more models from HuggingFace, Ollama, Ultralytics, Pipeline Zoo Models, hls or GETI and optionally converts them
         to OpenVINO IR format for huggingface hub models. This endpoint processes requests asynchronously and returns job IDs immediately.
 
         **Conversion Behavior:**
@@ -359,7 +359,7 @@ paths:
         **Authentication:**
         - HUGGINGFACEHUB_API_TOKEN is optional for public HuggingFace models
         - HUGGINGFACEHUB_API_TOKEN is required for gated/private HuggingFace models and for conversion
-        - No authentication needed for Ollama or Ultralytics models
+        - No authentication needed for Ollama, Ultralytics, Pipeline Zoo Models, GETI, or HLS models
 
         **Job Processing:**
         - Each model download creates a separate job
@@ -415,6 +415,12 @@ paths:
                   models:
                     - name: yolov8s
                       hub: ultralytics
+              pipeline_zoo_models_download:
+                summary: Download Pipeline Zoo model
+                value:
+                  models:
+                    - name: dbnet
+                      hub: pipeline-zoo-models
               GETI_download:
                 summary: Download GETI model
                 value:
@@ -462,7 +468,7 @@ paths:
                 unsupported_hub:
                   summary: Unsupported model hub
                   value:
-                    detail: "Unsupported model download/conversion detected. Supported methods are {'huggingface', 'ollama', 'ultralytics', 'openvino', 'geti', 'hls'}."
+                    detail: "Unsupported model download/conversion detected. Supported methods are {'huggingface', 'ollama', 'ultralytics', 'pipeline-zoo-models', 'openvino', 'geti', 'hls'}."
                 plugin_unavailable:
                   summary: Plugin dependencies not installed
                   value:

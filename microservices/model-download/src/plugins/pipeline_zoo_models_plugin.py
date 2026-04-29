@@ -117,7 +117,7 @@ class PipelineZooModelsPlugin(ModelDownloadPlugin):
 
     def _ensure_repo_downloaded(self) -> Path:
         if PIPELINE_ZOO_EXTRACTED_DIR.is_dir():
-            logger.info("pipeline_zoo_repo_cache_hit", path=str(PIPELINE_ZOO_EXTRACTED_DIR))
+            logger.info("pipeline_zoo_repo_cache_available", path=str(PIPELINE_ZOO_EXTRACTED_DIR))
             return PIPELINE_ZOO_EXTRACTED_DIR
 
         PIPELINE_ZOO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
