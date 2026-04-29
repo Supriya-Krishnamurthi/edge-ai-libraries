@@ -74,34 +74,18 @@ class SupportedModel:
         """
         Checks if the model exists on disk.
 
-        For `genai` models, `model_path` is expected to be a directory that
-        contains the core OpenVINO GenAI runtime assets.
+        For `genai` models, `model_path` is expected to be a directory.
 
         Returns:
             bool: True if the model exists, False otherwise.
         """
         if self.model_type == "genai":
-            if not os.path.isdir(self.model_path_full):
-                return False
-
-            required_files = [
-                "openvino_tokenizer.xml",
-                "openvino_tokenizer.bin",
-                "openvino_detokenizer.xml",
-                "openvino_detokenizer.bin",
-                "openvino_vision_embeddings_model.xml",
-                "openvino_vision_embeddings_model.bin",
-                "openvino_text_embeddings_model.xml",
-                "openvino_text_embeddings_model.bin",
-                "openvino_language_model.xml",
-                "openvino_language_model.bin",
-                "openvino_config.json",
-                "config.json",
-            ]
-            return all(
-                os.path.isfile(os.path.join(self.model_path_full, required))
-                for required in required_files
-            )
+            exists = os.path.isdir(self.model_path_full)
+            if not exists:
+                logger.debug(
+                    f"GenAI model directory not found for '{self.display_name}' at path '{self.model_path_full}'"
+                )
+            return exists
 
         return os.path.isfile(self.model_path_full)
 
@@ -368,6 +352,22 @@ class SupportedModelsManager:
                                           and the selected default model name (or None).
         """
         return self._filter_models(model_names, default_model, "classification")
+
+    def filter_genai_models(
+        self, model_names: list[str], default_model: str
+    ) -> tuple[list[str], str | None]:
+        """
+        Filters GenAI models based on availability and input arguments.
+
+        Args:
+            model_names (list[str]): List of GenAI model display names to consider.
+            default_model (str): The default GenAI model's display name.
+
+        Returns:
+            tuple[list[str], str | None]: A tuple containing the filtered list of GenAI model display names
+                                          and the selected default model name (or None).
+        """
+        return self._filter_models(model_names, default_model, "genai")
 
     def get_all_installed_models(self) -> list[SupportedModel]:
         """
