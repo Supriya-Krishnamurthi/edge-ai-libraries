@@ -71,6 +71,7 @@ class DeviceType(str, Enum):
 class ModelHub(str, Enum):
     HUGGINGFACE = "huggingface"
     ULTRALYTICS = "ultralytics"
+    PIPELINE_ZOO_MODELS = "pipeline-zoo-models"
     OLLAMA = "ollama"
     OPENVINO = "openvino"
     GETI = "geti"
