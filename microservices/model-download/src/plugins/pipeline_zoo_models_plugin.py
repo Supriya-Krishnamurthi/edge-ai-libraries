@@ -22,6 +22,8 @@ PIPELINE_ZOO_CACHE_DIR = Path(
     os.getenv("PIPELINE_ZOO_CACHE_DIR", "/tmp/model_download_pipeline_zoo")
 )
 PIPELINE_ZOO_EXTRACTED_DIR = PIPELINE_ZOO_CACHE_DIR / "pipeline-zoo-models-main"
+# Hidden marker written only after a successful, fully-extracted download.
+PIPELINE_ZOO_COMPLETE_MARKER = ".download_complete"
 
 
 class PipelineZooModelsPlugin(ModelDownloadPlugin):
@@ -38,20 +40,9 @@ class PipelineZooModelsPlugin(ModelDownloadPlugin):
         return "downloader"
 
     def can_handle(self, model_name: str, hub: str, **kwargs) -> bool:
-        """Check if this plugin can handle the given model"""
+        """Return True for pipeline-zoo hubs; no model lookup."""
         hub_normalized = hub.lower().replace("_", "-")
-        if hub_normalized in {"pipeline-zoo-models", "pipeline-zoo"}:
-            return True
-
-        try:
-            supported_models = self.get_supported_models()
-            if model_name == "all":
-                return True
-            requested_models = self._parse_models(model_name)
-            return bool(requested_models) and all(model in supported_models for model in requested_models)
-        except Exception:
-            return False
-        return False
+        return hub_normalized in {"pipeline-zoo-models", "pipeline-zoo"}
 
     def download(self, model_name: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """Download one or more pipeline-zoo models from the upstream archive."""
@@ -61,15 +52,15 @@ class PipelineZooModelsPlugin(ModelDownloadPlugin):
         hub_dir = os.path.join(output_dir, "pipeline-zoo-models")
         os.makedirs(hub_dir, exist_ok=True)
 
+        with self._repo_lock:
+            repo_dir = self._ensure_repo_downloaded()
+
         if model_name.strip().lower() == "all":
-            requested_models = self.get_supported_models()
+            requested_models = self._list_models_in_repo(repo_dir)
         else:
             requested_models = self._parse_models(model_name)
         if not requested_models:
             raise ValueError("No pipeline-zoo model names were provided")
-
-        with self._repo_lock:
-            repo_dir = self._ensure_repo_downloaded()
 
         missing_models: List[str] = []
         for model in requested_models:
@@ -104,21 +95,23 @@ class PipelineZooModelsPlugin(ModelDownloadPlugin):
             "success": True,
         }
 
-    def get_supported_models(self) -> List[str]:
-        """Get list of supported models from pipeline-zoo storage directory."""
-        with self._repo_lock:
-            repo_dir = self._ensure_repo_downloaded()
-
+    @staticmethod
+    def _list_models_in_repo(repo_dir: Path) -> List[str]:
         storage_dir = repo_dir / "storage"
         if not storage_dir.is_dir():
             raise RuntimeError(f"Pipeline-zoo storage directory not found at {storage_dir}")
-
         return sorted([entry.name for entry in storage_dir.iterdir() if entry.is_dir()])
 
     def _ensure_repo_downloaded(self) -> Path:
-        if PIPELINE_ZOO_EXTRACTED_DIR.is_dir():
+        marker = PIPELINE_ZOO_EXTRACTED_DIR / PIPELINE_ZOO_COMPLETE_MARKER
+        if marker.is_file():
             logger.info("pipeline_zoo_repo_cache_available", path=str(PIPELINE_ZOO_EXTRACTED_DIR))
             return PIPELINE_ZOO_EXTRACTED_DIR
+
+        # Purge any stale / partial cache from a previous interrupted download.
+        if PIPELINE_ZOO_EXTRACTED_DIR.exists():
+            logger.info("pipeline_zoo_repo_cache_stale_purging", path=str(PIPELINE_ZOO_EXTRACTED_DIR))
+            shutil.rmtree(PIPELINE_ZOO_EXTRACTED_DIR)
 
         PIPELINE_ZOO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         fd, archive_path = tempfile.mkstemp(prefix="pipeline-zoo-models-", suffix=".tar.gz")
@@ -128,13 +121,24 @@ class PipelineZooModelsPlugin(ModelDownloadPlugin):
             logger.info("pipeline_zoo_repo_download_start", url=PIPELINE_ZOO_ARCHIVE_URL)
             urllib.request.urlretrieve(PIPELINE_ZOO_ARCHIVE_URL, archive_path)
 
+            # ``filter="data"`` (Python >= 3.12) rejects absolute paths,
+            # parent-directory traversal, symlinks/hardlinks escaping the
+            # destination and special device files.
+            if not hasattr(tarfile, "data_filter"):
+                raise RuntimeError(
+                    "tarfile data filter is unavailable; Python >= 3.12 is required "
+                    "to safely extract the pipeline-zoo archive"
+                )
             with tarfile.open(archive_path, "r:gz") as tar_ref:
-                tar_ref.extractall(path=PIPELINE_ZOO_CACHE_DIR)
+                tar_ref.extractall(path=PIPELINE_ZOO_CACHE_DIR, filter="data")
 
             if not PIPELINE_ZOO_EXTRACTED_DIR.is_dir():
                 raise RuntimeError(
                     f"Extracted pipeline-zoo repository directory not found: {PIPELINE_ZOO_EXTRACTED_DIR}"
                 )
+
+            # # Write the marker last: its presence signals a complete, trusted cache.
+            (PIPELINE_ZOO_EXTRACTED_DIR / PIPELINE_ZOO_COMPLETE_MARKER).touch()
 
             logger.info("pipeline_zoo_repo_download_done", path=str(PIPELINE_ZOO_EXTRACTED_DIR))
             return PIPELINE_ZOO_EXTRACTED_DIR

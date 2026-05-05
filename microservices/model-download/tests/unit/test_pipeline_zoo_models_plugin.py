@@ -37,12 +37,15 @@ class TestPipelineZooModelsPlugin:
     def test_can_handle(self, plugin, hub, expected):
         assert plugin.can_handle("model_a", hub) is expected
 
-    def test_can_handle_supported_models_when_hub_differs(self, plugin, monkeypatch):
-        monkeypatch.setattr(plugin, "get_supported_models", lambda: ["dbnet", "yolov5m-320"])
-        assert plugin.can_handle("dbnet", "other") is True
-        assert plugin.can_handle("dbnet,yolov5m-320", "other") is True
-        assert plugin.can_handle("missing", "other") is False
-        assert plugin.can_handle("all", "other") is True
+    def test_can_handle_does_not_trigger_download(self, plugin, monkeypatch):
+        # can_handle must never invoke the repo download path.
+        def _fail(*args, **kwargs):
+            raise AssertionError("can_handle must not fetch the repo")
+
+        monkeypatch.setattr(plugin, "_ensure_repo_downloaded", _fail)
+
+        assert plugin.can_handle("dbnet", "other") is False
+        assert plugin.can_handle("all", "other") is False
 
     def test_download_success(self, plugin, temp_dir, monkeypatch):
         fake_repo_dir = Path(temp_dir) / "pipeline-zoo-models-main"
@@ -68,17 +71,6 @@ class TestPipelineZooModelsPlugin:
 
         with pytest.raises(RuntimeError, match="not found"):
             plugin.download("missing-model", temp_dir)
-
-    def test_get_supported_models(self, plugin, temp_dir, monkeypatch):
-        fake_repo_dir = Path(temp_dir) / "pipeline-zoo-models-main"
-        storage_dir = os.path.join(str(fake_repo_dir), "storage")
-        os.makedirs(os.path.join(storage_dir, "dbnet"), exist_ok=True)
-        os.makedirs(os.path.join(storage_dir, "yolov5m-320"), exist_ok=True)
-        Path(storage_dir, "README.md").write_text("ignore me", encoding="utf-8")
-
-        monkeypatch.setattr(plugin, "_ensure_repo_downloaded", lambda: fake_repo_dir)
-
-        assert plugin.get_supported_models() == ["dbnet", "yolov5m-320"]
 
     def test_download_all_models(self, plugin, temp_dir, monkeypatch):
         fake_repo_dir = Path(temp_dir) / "pipeline-zoo-models-main"
