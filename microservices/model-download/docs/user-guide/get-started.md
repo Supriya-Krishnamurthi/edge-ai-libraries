@@ -272,7 +272,7 @@ curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=ovms_mo
   - Boolean flags are emitted only when they evaluate to true. Leave them unset or false to skip the corresponding CLI switch.
   - Hugging Face authentication is still required for OVMS exports; provide `HUGGINGFACEHUB_API_TOKEN` (or pass the token via the API) before invoking these parameters.
 
-**Download models from GETI software, which are optimized through OpenVINO toolkit's optimization tool:**
+**Download models from Geti™ software, which are optimized through OpenVINO toolkit's optimization tool:**
 
 ```bash
 curl -X POST 'http://<host-ip>:8200/api/v1/models/download?download_path=geti_folder' \

@@ -2,12 +2,12 @@ openapi: 3.0.0
 info:
   title: Model Download Service API
   description: |
-    API for downloading models from HuggingFace, Ollama, Ultralytics, Pipeline Zoo Models, GETI hubs and HLS, converting models to OpenVINO IR format.
+    API for downloading models from HuggingFace, Ollama, Ultralytics, Pipeline Zoo Models, Geti™ hubs and HLS, converting models to OpenVINO IR format.
     This service provides endpoints to download models and optionally convert them to 
     OpenVINO Intermediate Representation (IR) format for optimized inference on Intel hardware.
 
     **Features:**
-    - Download models from multiple hubs (HuggingFace, Ollama, Ultralytics, Pipeline Zoo Models, GETI, HLS)
+    - Download models from multiple hubs (HuggingFace, Ollama, Ultralytics, Pipeline Zoo Models, Geti™, HLS)
     - Convert models to OpenVINO IR format with configurable precision and device targets for huggingface hub models
     - Asynchronous job processing with status tracking
     - Plugin-based architecture for extensibility
@@ -348,7 +348,7 @@ paths:
     post:
       summary: Download and optionally convert models
       description: |
-        Downloads one or more models from HuggingFace, Ollama, Ultralytics, Pipeline Zoo Models, hls or GETI and optionally converts them
+        Downloads one or more models from HuggingFace, Ollama, Ultralytics, Pipeline Zoo Models, hls or Geti™ and optionally converts them
         to OpenVINO IR format for huggingface hub models. This endpoint processes requests asynchronously and returns job IDs immediately.
 
         **Conversion Behavior:**
@@ -359,7 +359,7 @@ paths:
         **Authentication:**
         - HUGGINGFACEHUB_API_TOKEN is optional for public HuggingFace models
         - HUGGINGFACEHUB_API_TOKEN is required for gated/private HuggingFace models and for conversion
-        - No authentication needed for Ollama, Ultralytics, Pipeline Zoo Models, GETI, or HLS models
+        - No authentication needed for Ollama, Ultralytics, Pipeline Zoo Models, Geti™, or HLS models
 
         **Job Processing:**
         - Each model download creates a separate job
@@ -421,8 +421,8 @@ paths:
                   models:
                     - name: dbnet
                       hub: pipeline-zoo-models
-              GETI_download:
-                summary: Download GETI model
+              geti_download:
+                summary: Download Geti™ model
                 value:
                   models:
                     - name: yolox-tiny
@@ -707,7 +707,7 @@ paths:
       summary: List available plugins
       description: |
         Retrieve information about all available plugins, their capabilities, and status.
-        This includes both hub plugins (HuggingFace, Ollama, Ultralytics, GETI, hls) and conversion plugins (OpenVINO).
+        This includes both hub plugins (HuggingFace, Ollama, Ultralytics, Geti™, hls) and conversion plugins (OpenVINO).
       operationId: listPlugins
       tags:
         - Plugins
