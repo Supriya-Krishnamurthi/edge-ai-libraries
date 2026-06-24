@@ -328,6 +328,66 @@ components:
           enum: [ok]
           description: Health status of the service
 
+    ModelListItem:
+      type: object
+      description: A single model entry returned by the hub listing endpoint.
+      additionalProperties: true
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Model name to pass as `name` in POST /api/v1/models/download
+          example: microsoft/Phi-3.5-mini-instruct
+        owner:
+          type: string
+          nullable: true
+          description: Owner or organization that publishes the model
+        precisions:
+          type: array
+          items:
+            type: string
+          description: Weight precisions reported by the hub (may be empty)
+        tags:
+          type: array
+          items:
+            type: string
+          description: Hub tags associated with the model
+        model_type:
+          type: string
+          nullable: true
+          description: Model task/type as reported by the hub (e.g. pipeline tag)
+        last_modified:
+          type: string
+          nullable: true
+          description: ISO 8601 timestamp of the model's last modification
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Hub-specific extra metadata (e.g. downloads, likes, library_name)
+
+    ModelListResponse:
+      type: object
+      properties:
+        hub:
+          type: string
+          description: The hub the models were listed from
+          example: huggingface
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelListItem"
+        total:
+          type: integer
+          nullable: true
+          description: Total number of models available, when the hub reports it
+        limit:
+          type: integer
+          description: Maximum number of items requested
+        offset:
+          type: integer
+          description: Number of items skipped for pagination
+
 paths:
   /health:
     get:
@@ -343,6 +403,105 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+
+  /hubs/{hub}/models:
+    get:
+      summary: List models available on a hub
+      description: |
+        Lists models available on a hub. Returns model names and details; the
+        same model names can be passed as `name` to POST /api/v1/models/download.
+
+        Listing is currently supported for the `huggingface` and `ultralytics`
+        hubs. Hubs that do not support listing return `501`.
+      operationId: listHubModels
+      tags:
+        - Models
+      parameters:
+        - in: path
+          name: hub
+          required: true
+          schema:
+            type: string
+          description: The hub to list models from
+          example: huggingface
+        - in: query
+          name: author
+          required: false
+          schema:
+            type: string
+          description: Filter by owner/organization (hub-specific)
+          example: microsoft
+        - in: query
+          name: search
+          required: false
+          schema:
+            type: string
+          description: Substring search filter for model names
+          example: phi
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+          description: Maximum number of items to return
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Number of items to skip for pagination
+      responses:
+        "200":
+          description: Models listed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelListResponse"
+        "400":
+          description: Invalid pagination parameters, unknown hub, or hub not activated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Unknown hub 'foo'"
+        "401":
+          description: Authentication failed for the hub
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Authentication required to list models"
+        "501":
+          description: Hub does not support listing models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Hub 'ollama' does not support listing models"
+        "502":
+          description: Upstream hub request failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Failed to list models from hub 'huggingface'"
 
   /models/download:
     post:
