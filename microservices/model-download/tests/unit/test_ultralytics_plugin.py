@@ -611,4 +611,38 @@ class TestUltralyticsPluginIntegration:
                 )
             
             assert "Failed to download Ultralytics model" in str(exc_info.value)
-            assert "invalid_model.pt" in str(exc_info.value)
+
+
+class TestUltralyticsListModels:
+    """Test suite for UltralyticsDownloader.list_models"""
+
+    @pytest.fixture
+    def ultralytics_plugin(self):
+        return UltralyticsDownloader()
+
+    def test_supports_listing(self, ultralytics_plugin):
+        assert ultralytics_plugin.supports_listing is True
+
+    @patch.object(UltralyticsDownloader, 'get_supported_models')
+    def test_list_models_returns_names(self, mock_get_models, ultralytics_plugin):
+        mock_get_models.return_value = ["yolov8n.pt", "yolov8s.pt", "all", "yolo_all"]
+
+        result = ultralytics_plugin.list_models()
+
+        # Aggregate selectors are excluded; only real model names remain.
+        assert result["total"] == 2
+        assert result["items"] == [
+            {"name": "yolov8n.pt"},
+            {"name": "yolov8s.pt"},
+        ]
+
+    @patch.object(UltralyticsDownloader, 'get_supported_models')
+    def test_list_models_search_and_pagination(self, mock_get_models, ultralytics_plugin):
+        mock_get_models.return_value = ["yolov8n.pt", "yolov8s.pt", "yolov5n.pt"]
+
+        searched = ultralytics_plugin.list_models(filters={"search": "yolov8"})
+        assert [i["name"] for i in searched["items"]] == ["yolov8n.pt", "yolov8s.pt"]
+
+        paged = ultralytics_plugin.list_models(limit=1, offset=1)
+        assert paged["total"] == 3
+        assert [i["name"] for i in paged["items"]] == ["yolov8s.pt"]

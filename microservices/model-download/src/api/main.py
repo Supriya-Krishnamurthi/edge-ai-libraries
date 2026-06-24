@@ -16,7 +16,8 @@ from pydantic import ValidationError
 from ..core.plugin_registry import PluginRegistry
 from ..core.model_manager import ModelManager
 import importlib
-from .models import ModelDownloadRequest, ModelHub
+from .models import ModelDownloadRequest, ModelHub, ModelListItem, ModelListResponse
+from ..core.interfaces import ListingAuthError, ListingNotSupportedError
 from ..utils.logging import logger
 from ..utils.helper import validate_zip_contents_within_target, validate_zip_file, sanitize_path_part
 
@@ -77,6 +78,68 @@ async def health_check():
     Health check endpoint to verify the service is running.
     """
     return {"status": "ok"}
+
+
+@app.get("/hubs/{hub}/models", response_model=ModelListResponse, tags=["Models"])
+async def list_hub_models(
+    hub: str,
+    author: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> ModelListResponse:
+    """
+    List models available on a hub.
+
+    Returns model names and details. The same model names can be passed to ``POST /api/v1/models/download``.
+    """
+    if limit < 1 or limit > 200:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 200")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be >= 0")
+
+    hub_name = hub.lower()
+    plugin = plugin_registry.get_plugin("downloader", hub_name)
+    if plugin is None:
+        raise HTTPException(status_code=400, detail=f"Unknown hub '{hub}'")
+
+    # Check listing support before activation: external-source hubs (e.g. url, omz)
+    # don't support listing, so they short-circuit here and never reach the
+    # activation check, which doesn't apply to non-plugin external sources.
+    if not getattr(plugin, "supports_listing", False):
+        raise HTTPException(status_code=501, detail=f"Hub '{hub}' does not support listing models")
+
+    # TODO(rebase onto tarball-sources): switch to plugin_registry.hub_is_available(hub_name),
+    # which is hub-keyed and resolves multi-hub plugins (e.g. external-sources -> url/omz).
+    # check_plugin_dependencies is plugin-name-keyed and is only correct here while the
+    # listing hubs (huggingface, ultralytics) are single-hub plugins where plugin_name == hub.
+    is_available, reason = plugin_registry.check_plugin_dependencies(hub_name)
+    if not is_available:
+        raise HTTPException(status_code=400, detail=f"Hub '{hub}' is not available: {reason}")
+
+    filters = {"author": author, "search": search}
+    try:
+        result = await asyncio.to_thread(
+            plugin.list_models, filters=filters, limit=limit, offset=offset
+        )
+    except ListingNotSupportedError:
+        raise HTTPException(status_code=501, detail=f"Hub '{hub}' does not support listing models")
+    except ListingAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to list models for hub '{hub}': {exc}")
+        raise HTTPException(status_code=502, detail=f"Failed to list models from hub '{hub}'")
+
+    items = [ModelListItem(**item) for item in result.get("items", [])]
+    return ModelListResponse(
+        hub=hub_name,
+        items=items,
+        total=result.get("total"),
+        limit=limit,
+        offset=offset,
+    )
 
 
 @app.post("/models/download")

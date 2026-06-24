@@ -464,3 +464,91 @@ class TestHuggingFacePluginIntegration:
                 
                 # Should replace /opt/models/ with default prefix
                 assert result["download_path"] == "models/huggingface"
+
+
+class TestHuggingFaceListModels:
+    """Test suite for HuggingFacePlugin.list_models"""
+
+    @pytest.fixture
+    def hf_plugin(self):
+        return HuggingFacePlugin()
+
+    def _make_model(self, model_id, dtype_params=None, **extra):
+        model = MagicMock()
+        model.id = model_id
+        model.tags = extra.get("tags", ["text-generation"])
+        model.pipeline_tag = extra.get("pipeline_tag", "text-generation")
+        model.downloads = extra.get("downloads", 100)
+        model.likes = extra.get("likes", 10)
+        last_modified = MagicMock()
+        last_modified.isoformat.return_value = "2024-01-01T00:00:00"
+        model.last_modified = last_modified
+        if dtype_params is not None:
+            safetensors = MagicMock()
+            safetensors.parameters = dtype_params
+            model.safetensors = safetensors
+        else:
+            model.safetensors = None
+        return model
+
+    def test_supports_listing(self, hf_plugin):
+        assert hf_plugin.supports_listing is True
+
+    @patch('src.plugins.huggingface_plugin.HfApi')
+    def test_list_models_basic(self, mock_hfapi, hf_plugin):
+        api = mock_hfapi.return_value
+        api.list_models.return_value = iter([
+            self._make_model("org/model-a", {"F16": 1000, "F32": 500}),
+        ])
+
+        result = hf_plugin.list_models(filters={"author": "org"}, limit=10, offset=0)
+
+        assert result["total"] is None
+        assert len(result["items"]) == 1
+        item = result["items"][0]
+        assert item["name"] == "org/model-a"
+        assert item["owner"] == "org"
+        assert item["precisions"] == ["F16", "F32"]
+        assert item["model_type"] == "text-generation"
+        assert item["last_modified"] == "2024-01-01T00:00:00"
+        assert item["metadata"]["downloads"] == 100
+        api.list_models.assert_called_once()
+
+    @patch('src.plugins.huggingface_plugin.HfApi')
+    def test_list_models_no_safetensors(self, mock_hfapi, hf_plugin):
+        api = mock_hfapi.return_value
+        api.list_models.return_value = iter([self._make_model("solo-model", None)])
+
+        result = hf_plugin.list_models(limit=5)
+
+        item = result["items"][0]
+        assert item["name"] == "solo-model"
+        assert item["owner"] is None
+        assert item["precisions"] == []
+
+    @patch('src.plugins.huggingface_plugin.HfApi')
+    def test_list_models_offset_pagination(self, mock_hfapi, hf_plugin):
+        api = mock_hfapi.return_value
+        api.list_models.return_value = iter([
+            self._make_model("org/m0"),
+            self._make_model("org/m1"),
+            self._make_model("org/m2"),
+        ])
+
+        result = hf_plugin.list_models(filters={"author": "org"}, limit=1, offset=2)
+
+        assert len(result["items"]) == 1
+        assert result["items"][0]["name"] == "org/m2"
+
+    @patch('src.plugins.huggingface_plugin.HfApi')
+    def test_list_models_auth_error(self, mock_hfapi, hf_plugin):
+        from huggingface_hub.utils import HfHubHTTPError
+        from src.core.interfaces import ListingAuthError
+
+        api = mock_hfapi.return_value
+        response = MagicMock()
+        response.status_code = 401
+        api.list_models.side_effect = HfHubHTTPError("unauthorized", response=response)
+
+        with pytest.raises(ListingAuthError):
+            hf_plugin.list_models(filters={"author": "private"})

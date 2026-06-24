@@ -1,8 +1,9 @@
 # Copyright (C) 2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-from huggingface_hub import snapshot_download
-from src.core.interfaces import ModelDownloadPlugin, DownloadTask
+from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub.utils import HfHubHTTPError
+from src.core.interfaces import ListingAuthError, ModelDownloadPlugin, DownloadTask
 from src.utils.logging import logger
 import os
 
@@ -17,6 +18,69 @@ class HuggingFacePlugin(ModelDownloadPlugin):
     @property
     def plugin_type(self) -> str:
         return "downloader"
+
+    @property
+    def supports_listing(self) -> bool:
+        return True
+
+    def list_models(self, filters=None, limit=50, offset=0, **kwargs) -> dict:
+        """List models for an owner/organization on the HuggingFace Hub."""
+        filters = filters or {}
+        token = os.getenv("HF_TOKEN")
+
+        author = filters.get("author") or filters.get("owner") or filters.get("organization")
+        search = filters.get("search")
+
+        api = HfApi(token=token)
+        # Fetch enough rows to honor offset-based pagination, then slice the page.
+        fetch_limit = (limit + offset) if offset else limit
+
+        try:
+            results = api.list_models(
+                author=author,
+                search=search,
+                sort="downloads",
+                direction=-1,
+                limit=fetch_limit,
+                expand=["downloads", "likes", "lastModified", "pipeline_tag", "tags", "safetensors"],
+            )
+            models = list(results)
+        except HfHubHTTPError as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status in (401, 403):
+                raise ListingAuthError("HuggingFace credentials are missing or invalid.") from exc
+            raise
+
+        page = models[offset: offset + limit] if offset else models[:limit]
+
+        items = [self._to_item(model) for model in page if getattr(model, "id", None)]
+        # HuggingFace does not return a global total for a filtered query.
+        return {"items": items, "total": None}
+
+    @staticmethod
+    def _to_item(model) -> dict:
+        model_id = model.id
+        owner = model_id.split("/")[0] if "/" in model_id else None
+        last_modified = getattr(model, "last_modified", None)
+
+        # Precisions come straight from the safetensors dtype breakdown.
+        safetensors = getattr(model, "safetensors", None)
+        params = getattr(safetensors, "parameters", None) if safetensors else None
+        precisions = sorted(params.keys()) if params else []
+
+        return {
+            "name": model_id,
+            "owner": owner,
+            "precisions": precisions,
+            "tags": list(getattr(model, "tags", []) or []),
+            "model_type": getattr(model, "pipeline_tag", None),
+            "last_modified": last_modified.isoformat() if hasattr(last_modified, "isoformat") else last_modified,
+            "metadata": {
+                "downloads": getattr(model, "downloads", None),
+                "likes": getattr(model, "likes", None),
+                "library_name": getattr(model, "library_name", None),
+            },
+        }
 
     def can_handle(self, model_name: str, hub: str, **kwargs) -> bool:
         return hub.lower() == "huggingface"
