@@ -293,6 +293,14 @@ components:
           properties:
             supports_parallel_downloads:
               type: boolean
+            supports_listing:
+              type: boolean
+              description: Whether the plugin can list models available on its hub
+            listing_filter_fields:
+              type: array
+              items:
+                type: string
+              description: Hub-specific filter fields accepted by the listing endpoint
         available:
           type: boolean
           description: Whether the plugin is available
@@ -365,6 +373,30 @@ components:
           type: object
           additionalProperties: true
           description: Hub-specific extra metadata (e.g. downloads, likes, library_name)
+
+    ModelListRequest:
+      type: object
+      description: Request body for listing models from a hub using hub-specific filters.
+      additionalProperties: true
+      properties:
+        filters:
+          type: object
+          additionalProperties: true
+          description: Hub-specific listing filters such as owner, organization, author, search, filter, and tags
+          example:
+            owner: microsoft
+            search: phi
+        limit:
+          type: integer
+          default: 50
+          minimum: 1
+          maximum: 200
+          description: Maximum number of items to return
+        offset:
+          type: integer
+          default: 0
+          minimum: 0
+          description: Number of items to skip for pagination
 
     ModelListResponse:
       type: object
@@ -502,6 +534,46 @@ paths:
                   detail:
                     type: string
                     example: "Failed to list models from hub 'huggingface'"
+
+    post:
+      summary: List models available on a hub using filters
+      description: |
+        Lists models available on a hub using a JSON request body for
+        hub-specific filters and pagination. Listing is currently supported for
+        the `huggingface` and `ultralytics` hubs. Hubs that do not support
+        listing return `501`.
+      operationId: listHubModelsWithBody
+      tags:
+        - Models
+      parameters:
+        - in: path
+          name: hub
+          required: true
+          schema:
+            type: string
+          description: The hub to list models from
+          example: huggingface
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelListRequest"
+      responses:
+        "200":
+          description: Models listed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelListResponse"
+        "400":
+          description: Invalid pagination parameters, unknown hub, or hub not activated
+        "401":
+          description: Authentication failed for the hub
+        "501":
+          description: Hub does not support listing models
+        "502":
+          description: Upstream hub request failed
 
   /models/download:
     post:

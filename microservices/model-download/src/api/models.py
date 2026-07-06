@@ -308,6 +308,18 @@ class ModelDownloadRequest(BaseModel):
     parallel_downloads: Optional[bool] = False
 
 
+class ModelListRequest(BaseModel):
+    """Request body for listing models from a hub."""
+    model_config = ConfigDict(extra="allow")
+
+    filters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Hub-specific listing filters such as owner, organization, author, search, filter, and tags.",
+    )
+    limit: int = Field(50, ge=1, le=200, description="Maximum models to return.")
+    offset: int = Field(0, ge=0, description="Number of models to skip.")
+
+
 class ModelListItem(BaseModel):
     """A single model entry returned by a hub listing."""
     model_config = ConfigDict(extra="allow", protected_namespaces=())

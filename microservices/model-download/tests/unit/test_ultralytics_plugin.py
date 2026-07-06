@@ -622,6 +622,7 @@ class TestUltralyticsListModels:
 
     def test_supports_listing(self, ultralytics_plugin):
         assert ultralytics_plugin.supports_listing is True
+        assert ultralytics_plugin.listing_filter_fields == ["search"]
 
     @patch.object(UltralyticsDownloader, 'get_supported_models')
     def test_list_models_returns_names(self, mock_get_models, ultralytics_plugin):

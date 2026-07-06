@@ -493,6 +493,7 @@ class TestHuggingFaceListModels:
 
     def test_supports_listing(self, hf_plugin):
         assert hf_plugin.supports_listing is True
+        assert hf_plugin.listing_filter_fields == ["author", "owner", "organization", "search", "filter", "tags"]
 
     @patch('src.plugins.huggingface_plugin.HfApi')
     def test_list_models_basic(self, mock_hfapi, hf_plugin):
@@ -513,6 +514,16 @@ class TestHuggingFaceListModels:
         assert item["last_modified"] == "2024-01-01T00:00:00"
         assert item["metadata"]["downloads"] == 100
         api.list_models.assert_called_once()
+        assert api.list_models.call_args.kwargs["author"] == "org"
+
+    @patch('src.plugins.huggingface_plugin.HfApi')
+    def test_list_models_maps_tags_to_filter(self, mock_hfapi, hf_plugin):
+        api = mock_hfapi.return_value
+        api.list_models.return_value = iter([])
+
+        hf_plugin.list_models(filters={"tags": ["text-generation"]})
+
+        assert api.list_models.call_args.kwargs["filter"] == ["text-generation"]
 
     @patch('src.plugins.huggingface_plugin.HfApi')
     def test_list_models_no_safetensors(self, mock_hfapi, hf_plugin):

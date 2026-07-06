@@ -23,6 +23,10 @@ class HuggingFacePlugin(ModelDownloadPlugin):
     def supports_listing(self) -> bool:
         return True
 
+    @property
+    def listing_filter_fields(self) -> list[str]:
+        return ["author", "owner", "organization", "search", "filter", "tags"]
+
     def list_models(self, filters=None, limit=50, offset=0, **kwargs) -> dict:
         """List models for an owner/organization on the HuggingFace Hub."""
         filters = filters or {}
@@ -30,6 +34,10 @@ class HuggingFacePlugin(ModelDownloadPlugin):
 
         author = filters.get("author") or filters.get("owner") or filters.get("organization")
         search = filters.get("search")
+        model_filter = filters.get("filter")
+        tags = filters.get("tags")
+        if tags and not model_filter:
+            model_filter = tags
 
         api = HfApi(token=token)
         # Fetch enough rows to honor offset-based pagination, then slice the page.
@@ -39,6 +47,7 @@ class HuggingFacePlugin(ModelDownloadPlugin):
             results = api.list_models(
                 author=author,
                 search=search,
+                filter=model_filter,
                 sort="downloads",
                 direction=-1,
                 limit=fetch_limit,

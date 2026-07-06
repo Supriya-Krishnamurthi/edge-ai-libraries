@@ -29,6 +29,10 @@ class UltralyticsDownloader(ModelDownloadPlugin):
     def supports_listing(self) -> bool:
         return True
 
+    @property
+    def listing_filter_fields(self) -> List[str]:
+        return ["search"]
+
     def list_models(self, filters=None, limit=50, offset=0, **kwargs) -> dict:
         """List the statically supported Ultralytics model names."""
         # The script only provides model names; exclude aggregate selectors.

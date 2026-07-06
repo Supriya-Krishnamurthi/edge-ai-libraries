@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from ..core.plugin_registry import PluginRegistry
 from ..core.model_manager import ModelManager
 import importlib
-from .models import ModelDownloadRequest, ModelHub, ModelListItem, ModelListResponse
+from .models import ModelDownloadRequest, ModelHub, ModelListItem, ModelListRequest, ModelListResponse
 from ..core.interfaces import ListingAuthError, ListingNotSupportedError
 from ..utils.logging import logger
 from ..utils.helper import validate_zip_contents_within_target, validate_zip_file, sanitize_path_part
@@ -80,19 +80,12 @@ async def health_check():
     return {"status": "ok"}
 
 
-@app.get("/hubs/{hub}/models", response_model=ModelListResponse, tags=["Models"])
-async def list_hub_models(
+async def _list_hub_models(
     hub: str,
-    author: Optional[str] = None,
-    search: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
     limit: int = 50,
     offset: int = 0,
 ) -> ModelListResponse:
-    """
-    List models available on a hub.
-
-    Returns model names and details. The same model names can be passed to ``POST /api/v1/models/download``.
-    """
     if limit < 1 or limit > 200:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 200")
     if offset < 0:
@@ -103,9 +96,6 @@ async def list_hub_models(
     if plugin is None:
         raise HTTPException(status_code=400, detail=f"Unknown hub '{hub}'")
 
-    # Check listing support before activation: external-source hubs (e.g. url, omz)
-    # don't support listing, so they short-circuit here and never reach the
-    # activation check, which doesn't apply to non-plugin external sources.
     if not getattr(plugin, "supports_listing", False):
         raise HTTPException(status_code=501, detail=f"Hub '{hub}' does not support listing models")
 
@@ -117,10 +107,12 @@ async def list_hub_models(
     if not is_available:
         raise HTTPException(status_code=400, detail=f"Hub '{hub}' is not available: {reason}")
 
-    filters = {"author": author, "search": search}
     try:
         result = await asyncio.to_thread(
-            plugin.list_models, filters=filters, limit=limit, offset=offset
+            plugin.list_models,
+            filters=filters or {},
+            limit=limit,
+            offset=offset,
         )
     except ListingNotSupportedError:
         raise HTTPException(status_code=501, detail=f"Hub '{hub}' does not support listing models")
@@ -139,6 +131,39 @@ async def list_hub_models(
         total=result.get("total"),
         limit=limit,
         offset=offset,
+    )
+
+
+@app.get("/hubs/{hub}/models", response_model=ModelListResponse, tags=["Models"])
+async def list_hub_models(
+    hub: str,
+    author: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> ModelListResponse:
+    """
+    List models available on a hub.
+
+    Returns model names and details. The same model names can be passed to ``POST /api/v1/models/download``.
+    """
+    filters = {"author": author, "search": search}
+    return await _list_hub_models(hub, filters=filters, limit=limit, offset=offset)
+
+
+@app.post("/hubs/{hub}/models", response_model=ModelListResponse, tags=["Models"])
+async def list_hub_models_with_body(hub: str, request: ModelListRequest) -> ModelListResponse:
+    """
+    List models available on a hub using hub-specific filters.
+    """
+    filters = request.filters.copy()
+    body_extras = request.model_extra or {}
+    filters.update({key: value for key, value in body_extras.items() if value is not None})
+    return await _list_hub_models(
+        hub,
+        filters=filters,
+        limit=request.limit,
+        offset=request.offset,
     )
 
 
@@ -398,6 +423,8 @@ async def list_plugins():
                 "description": getattr(plugin, "__doc__", "No description available").strip(),
                 "capabilities": {
                     "supports_parallel_downloads": can_handle_parallel,
+                    "supports_listing": getattr(plugin, "supports_listing", False),
+                    "listing_filter_fields": getattr(plugin, "listing_filter_fields", []),
                 },
                 "available": is_available,
                 "unavailable_reason": reason if not is_available else None

@@ -45,6 +45,11 @@ class ModelDownloadPlugin(ABC):
         """Whether this plugin can list models available on its hub."""
         return False
 
+    @property
+    def listing_filter_fields(self) -> List[str]:
+        """Filter fields supported by ``list_models`` for this plugin."""
+        return []
+
     def list_models(self, filters: Optional[Dict[str, Any]] = None, limit: int = 50, offset: int = 0, **kwargs) -> Dict[str, Any]:
         """
         List models available on this hub.

@@ -595,8 +595,12 @@ class TestAPIMain:
         # Setup mocks
         mock_hf_plugin = MagicMock()
         mock_hf_plugin.__doc__ = "HuggingFace plugin for model downloads"
+        mock_hf_plugin.supports_listing = True
+        mock_hf_plugin.listing_filter_fields = ["author", "search"]
         mock_ollama_plugin = MagicMock()
         mock_ollama_plugin.__doc__ = "Ollama plugin for local models"
+        mock_ollama_plugin.supports_listing = False
+        mock_ollama_plugin.listing_filter_fields = []
         mock_openvino_plugin = MagicMock()
         mock_openvino_plugin.__doc__ = "OpenVINO converter plugin"
 
@@ -631,6 +635,69 @@ class TestAPIMain:
         assert "converter" in data["available_plugins"]
         assert data["total_count"] == 3
         assert data["available_count"] == 2  # huggingface and openvino are available
+        hf_capabilities = data["available_plugins"]["downloader"][0]["capabilities"]
+        assert hf_capabilities["supports_listing"] is True
+        assert hf_capabilities["listing_filter_fields"] == ["author", "search"]
+
+    @patch('src.api.main.plugin_registry')
+    def test_list_hub_models_get(self, mock_registry, client):
+        """Test listing hub models using query parameters"""
+        mock_plugin = MagicMock()
+        mock_plugin.supports_listing = True
+        mock_plugin.list_models.return_value = {
+            "items": [{"name": "org/model-a", "owner": "org", "tags": ["text-generation"]}],
+            "total": None,
+        }
+        mock_registry.get_plugin.return_value = mock_plugin
+        mock_registry.check_plugin_dependencies.return_value = (True, None)
+
+        response = client.get("/hubs/huggingface/models?author=org&search=model&limit=10&offset=1")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["hub"] == "huggingface"
+        assert data["items"][0]["name"] == "org/model-a"
+        mock_plugin.list_models.assert_called_once_with(
+            filters={"author": "org", "search": "model"},
+            limit=10,
+            offset=1,
+        )
+
+    @patch('src.api.main.plugin_registry')
+    def test_list_hub_models_post_with_filters(self, mock_registry, client):
+        """Test listing hub models using request body filters"""
+        mock_plugin = MagicMock()
+        mock_plugin.supports_listing = True
+        mock_plugin.list_models.return_value = {"items": [{"name": "yolov8n.pt"}], "total": 1}
+        mock_registry.get_plugin.return_value = mock_plugin
+        mock_registry.check_plugin_dependencies.return_value = (True, None)
+
+        response = client.post(
+            "/hubs/ultralytics/models",
+            json={"filters": {"search": "yolov8"}, "limit": 25, "offset": 0},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert data["items"][0]["name"] == "yolov8n.pt"
+        mock_plugin.list_models.assert_called_once_with(
+            filters={"search": "yolov8"},
+            limit=25,
+            offset=0,
+        )
+
+    @patch('src.api.main.plugin_registry')
+    def test_list_hub_models_unsupported(self, mock_registry, client):
+        """Test that hubs without listing support return 501"""
+        mock_plugin = MagicMock()
+        mock_plugin.supports_listing = False
+        mock_registry.get_plugin.return_value = mock_plugin
+
+        response = client.get("/hubs/geti/models")
+
+        assert response.status_code == 501
+        assert response.json()["detail"] == "Hub 'geti' does not support listing models"
 
     def test_invalid_request_format(self, client):
         """Test API with invalid request format"""
