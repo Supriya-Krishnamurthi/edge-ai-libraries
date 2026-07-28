@@ -487,6 +487,24 @@ curl -X GET "http://<host-ip>:8200/api/v1/jobs/<job_id>"
 }
 ```
 
+**Cancel a running or queued job:**
+
+Use `POST /api/v1/jobs/<job_id>/cancel` to cancel a job that is still in a cancellable state (`queued`, `downloading`, or `converting`). If the job is already in a terminal state (`completed`, `failed`, or `canceled`), the endpoint returns `409`.
+
+```bash
+curl -X POST "http://<host-ip>:8200/api/v1/jobs/<job_id>/cancel"
+```
+
+**Sample Response (when the job is cancelled):**
+
+```json
+{
+  "message": "Job 5f0d4eba-c79c-4d02-97a6-43c3d0168ca0 has been cancelled",
+  "job_id": "5f0d4eba-c79c-4d02-97a6-43c3d0168ca0",
+  "status": "canceled"
+}
+```
+
 **Upload a custom model ZIP:**
 
 Use this endpoint when user (or another client app) needs to upload a local model directly to model-download.
