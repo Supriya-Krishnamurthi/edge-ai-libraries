@@ -164,6 +164,22 @@ components:
         - canceled
       description: Status of a job
 
+    CancelJobResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Human-readable confirmation message
+          example: "Job download_abc123 has been cancelled"
+        job_id:
+          type: string
+          description: The cancelled job's identifier
+          example: download_abc123
+        status:
+          type: string
+          enum: [canceled]
+          description: The resulting job status
+
     Job:
       type: object
       required:
@@ -831,6 +847,59 @@ paths:
                   detail:
                     type: string
                     example: "Job download_abc123 not found"
+
+  /jobs/{job_id}/cancel:
+    post:
+      summary: Cancel a running or queued job
+      description: |
+        Cancel a job that is in a cancellable state (queued, downloading, or converting).
+        On success the job moves to status `canceled`, any active worker threads or
+        subprocesses are stopped, and partially downloaded files are cleaned up.
+
+        Returns 404 if the job does not exist and 409 if the job is already in a
+        terminal state (completed, failed, or canceled).
+      operationId: cancelJob
+      tags:
+        - Jobs
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            type: string
+          description: The unique job identifier to cancel
+          example: download_abc123
+      responses:
+        "200":
+          description: Job cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelJobResponse"
+              example:
+                message: "Job download_abc123 has been cancelled"
+                job_id: download_abc123
+                status: canceled
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Job download_abc123 not found"
+        "409":
+          description: Job is already in a terminal state and cannot be cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Job download_abc123 is already in terminal state 'completed' and cannot be cancelled"
 
   /jobs:
     get:

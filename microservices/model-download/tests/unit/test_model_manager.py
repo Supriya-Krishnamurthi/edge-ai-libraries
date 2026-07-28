@@ -132,3 +132,71 @@ async def test_process_conversion_auto_detects_converter_for_huggingface_source(
         precision="int8",
         device="CPU",
     )
+
+
+def test_cancel_job_downloading(tmp_path):
+    """Cancel a job that is currently downloading."""
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("download", "test-model", "huggingface", str(tmp_path))
+    manager._jobs[job_id]["status"] = "downloading"
+
+    assert manager.cancel_job(job_id) is True
+    assert manager._jobs[job_id]["status"] == "canceled"
+    assert "completion_time" in manager._jobs[job_id]
+
+
+def test_cancel_job_queued(tmp_path):
+    """Cancel a job that is still queued."""
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("download", "test-model", "huggingface", str(tmp_path))
+
+    assert manager._jobs[job_id]["status"] == "queued"
+    assert manager.cancel_job(job_id) is True
+    assert manager._jobs[job_id]["status"] == "canceled"
+
+
+def test_cancel_job_converting(tmp_path):
+    """Cancel a job that is currently converting."""
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("convert", "test-model", "openvino", str(tmp_path))
+    manager._jobs[job_id]["status"] = "converting"
+
+    assert manager.cancel_job(job_id) is True
+    assert manager._jobs[job_id]["status"] == "canceled"
+
+
+def test_cancel_job_completed_returns_false(tmp_path):
+    """Cancelling a completed job should return False."""
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("download", "test-model", "huggingface", str(tmp_path))
+    manager._jobs[job_id]["status"] = "completed"
+
+    assert manager.cancel_job(job_id) is False
+    assert manager._jobs[job_id]["status"] == "completed"
+
+
+def test_cancel_job_nonexistent_returns_false(tmp_path):
+    """Cancelling a non-existent job should return False."""
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+
+    assert manager.cancel_job("nonexistent-id") is False
+
+
+def test_cancel_job_shuts_down_executor(tmp_path):
+    """Cancel should shut down the executor if one is active."""
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("download", "test-model", "huggingface", str(tmp_path))
+    manager._jobs[job_id]["status"] = "downloading"
+
+    mock_executor = MagicMock()
+    manager._executors[job_id] = mock_executor
+
+    assert manager.cancel_job(job_id) is True
+    mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
+    assert job_id not in manager._executors
