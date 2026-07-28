@@ -595,6 +595,34 @@ To validate changes locally before deploying:
 Use `pytest tests/ --cov=src --cov-report=term` if you also need coverage metrics. See
 [docs/user-guide/running-tests.md](./running-tests.md) for advanced filtering options and troubleshooting tips.
 
+## Model Storage Path Layout
+
+When a download completes, the `result.download_path` field in the job response contains the absolute host-mapped path to the model directory. The path is deterministic — downloading the same model with the same parameters always produces the same path.
+
+All hubs follow a common base pattern:
+
+```text
+<download_path>/<hub>/<model_name>/[<precision>/]
+```
+
+Where `<download_path>` is the `download_path` query parameter passed to `POST /api/v1/models/download`, resolved relative to the configured model storage root.
+
+Hubs that support multiple precisions append a `<precision>/` subdirectory. Hubs that do not support precision store files directly under `<model_name>/`:
+
+| Hub | Path layout | Example |
+|-----|------------|---------|
+| `huggingface` | `<download_path>/<hub>/<model_name>` | `models/huggingface/microsoft_Phi-3.5-mini-instruct` |
+| `ollama` | `<download_path>/<hub>/<model_name>` | `models/ollama/tinyllama` |
+| `ultralytics` | `<download_path>/<hub>/<model_name>/<precision>/` | `models/ultralytics/yolov8s/FP16/` |
+| `openvino` | `<download_path>/<hub>/<model_name>/<precision>/` | `models/openvino/BAAI-bge-reranker-base/fp32/` |
+| `geti` | `<download_path>/<hub>/<model_name>/<precision>/` | `models/geti/yolox-tiny/FP32/` |
+| `pipeline-zoo-models` | `<download_path>/<hub>/<model_name>/` | `models/pipeline-zoo-models/dbnet/` |
+| `omz` | `<download_path>/<hub>/<model_name>/` | `models/omz/mobilenet-v2-pytorch/` |
+| `remote-url` | `<download_path>/<hub>/<model_name>/` | `models/remote-url/wind-turbine-anomaly-detection/` |
+| `hls` | `<download_path>/<hub>/<model_name>/` | `models/hls/human-pose-estimation-3d-0001/` |
+
+> **Note:** For model names containing `/` (for example, `microsoft/Phi-3.5-mini-instruct`), the slash is replaced with `_` in the directory name.
+
 ## Best Practices
 
 1. Use parallel downloads with caution because they can consume significant resources.
