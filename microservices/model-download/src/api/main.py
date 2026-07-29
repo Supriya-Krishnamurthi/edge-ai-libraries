@@ -371,11 +371,30 @@ async def cancel_job(job_id: str):
     if not cancelled:
         raise HTTPException(status_code=409, detail=f"Job {job_id} could not be cancelled")
 
-    return {
+    # Some hubs (huggingface, geti) use in-process API calls that cannot be
+    # interrupted mid-transfer. For these, cancellation is best-effort: the job
+    # is marked canceled but the underlying network transfer may continue briefly
+    # until it completes or times out and partial files are cleaned up
+    hub = job.get("hub", "").lower()
+    best_effort_hubs = {"huggingface", "geti", "openvino"}
+    warning = None
+    if hub in best_effort_hubs:
+        warning = (
+            f"Hub '{hub}' does not support immediate interruption. "
+            "The transfer may continue briefly; partial files are cleaned "
+            "up automatically."
+        )
+        logger.warning("cancel_best_effort", job_id=job_id, hub=hub)
+
+    response = {
         "message": f"Job {job_id} has been cancelled",
         "job_id": job_id,
         "status": "canceled",
     }
+    if warning:
+        response["warning"] = warning
+
+    return response
 
 
 @app.get("/models/results", tags=["Models"])

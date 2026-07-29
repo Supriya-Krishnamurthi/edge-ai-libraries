@@ -179,6 +179,14 @@ components:
           type: string
           enum: [canceled]
           description: The resulting job status
+        warning:
+          type: string
+          nullable: true
+          description: |
+            Present only for hubs that do not support immediate interruption
+            (huggingface, geti, openvino). The transfer may continue briefly;
+            partial files are cleaned up automatically.
+          example: "Hub 'huggingface' does not support immediate interruption. The transfer may continue briefly; partial files are cleaned up automatically."
 
     Job:
       type: object

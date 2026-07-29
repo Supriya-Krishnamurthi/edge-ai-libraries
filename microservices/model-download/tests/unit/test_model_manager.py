@@ -124,14 +124,12 @@ async def test_process_conversion_auto_detects_converter_for_huggingface_source(
     )
 
     assert result["status"] == "completed"
-    registry.find_plugin_for_model.assert_called_once_with(
-        "converter",
-        hub="openvino",
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        is_ovms=True,
-        precision="int8",
-        device="CPU",
-    )
+    call_kwargs = registry.find_plugin_for_model.call_args[1]
+    assert call_kwargs["hub"] == "openvino"
+    assert call_kwargs["model_name"] == "sentence-transformers/all-MiniLM-L6-v2"
+    assert call_kwargs["is_ovms"] is True
+    assert call_kwargs["precision"] == "int8"
+    assert call_kwargs["device"] == "CPU"
 
 
 def test_cancel_job_downloading(tmp_path):
@@ -200,3 +198,60 @@ def test_cancel_job_shuts_down_executor(tmp_path):
     assert manager.cancel_job(job_id) is True
     mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
     assert job_id not in manager._executors
+
+
+def test_cancel_job_kills_active_processes(tmp_path):
+    """Cancel should terminate and kill registered subprocesses."""
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("download", "test-model", "ollama", str(tmp_path))
+    manager._jobs[job_id]["status"] = "downloading"
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None  # still running after terminate
+    manager._active_processes[job_id] = [mock_proc]
+    manager.get_cancel_event(job_id)
+
+    assert manager.cancel_job(job_id) is True
+    mock_proc.terminate.assert_called_once()
+    mock_proc.kill.assert_called_once()
+
+
+def test_cancel_event_persists_for_thread_check(tmp_path):
+    """Cancel event must remain accessible after cancel_job returns."""
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("download", "test-model", "huggingface", str(tmp_path))
+    manager._jobs[job_id]["status"] = "downloading"
+    manager.get_cancel_event(job_id)
+
+    manager.cancel_job(job_id)
+    # The background thread needs to check this after cancel_job returns
+    assert manager.is_job_cancelled(job_id) is True
+
+
+@pytest.mark.asyncio
+async def test_process_download_returns_canceled_when_subprocess_killed(tmp_path):
+    """When a subprocess is killed by cancel_job, process_download returns canceled."""
+    registry = MagicMock()
+    download_plugin = MagicMock()
+    download_plugin.plugin_name = "ollama"
+    download_plugin.resolve_config.return_value = {}
+    download_plugin.get_download_tasks.side_effect = NotImplementedError
+    download_plugin.download = MagicMock(side_effect=RuntimeError("process killed"))
+    registry.get_plugin.return_value = download_plugin
+
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("download", "llama2", "ollama", str(tmp_path))
+    # Simulate cancel_job having been called (set event, mark status)
+    manager.get_cancel_event(job_id).set()
+    manager._jobs[job_id]["status"] = "canceled"
+
+    result = await manager.process_download(
+        job_id=job_id,
+        model_name="llama2",
+        hub="ollama",
+        output_dir=str(tmp_path),
+        downloader="ollama",
+    )
+    assert result["status"] == "canceled"

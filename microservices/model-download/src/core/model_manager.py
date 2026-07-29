@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import shutil
+import time
 import uuid
 import asyncio
 import inspect
@@ -51,6 +53,9 @@ class ModelManager:
         self.default_dir = os.path.abspath(default_dir)
         self._jobs = {}  # In-memory job storage
         self._executors = {}  # Active executor pools by job
+        self._cancel_events: Dict[str, threading.Event] = {}  # Cancellation signals per job
+        self._asyncio_tasks: Dict[str, asyncio.Task] = {}  # Asyncio tasks per job
+        self._active_processes: Dict[str, List] = {}  # Subprocess handles per job
         self._jobs_lock = threading.RLock()
         os.makedirs(self.default_dir, exist_ok=True)
         logger.info("model_manager_initialized", default_dir=self.default_dir)
@@ -137,6 +142,13 @@ class ModelManager:
             if result is not None:
                 job["result"] = result
 
+    def _handle_cancelled_job(self, job_id: str, output_dir: Optional[str], log_event: str, **log_extra) -> None:
+        """Clean up residual files for a cancelled job and log the event."""
+        if output_dir and os.path.isdir(output_dir):
+            shutil.rmtree(output_dir, ignore_errors=True)
+        self._cancel_events.pop(job_id, None)
+        logger.info(log_event, job_id=job_id, **log_extra)
+
     async def process_download(
         self,
         job_id: str,
@@ -160,6 +172,14 @@ class ModelManager:
         Returns:
             Dictionary with job details and status
         """
+        # Ensure a cancel event exists for cooperative cancellation
+        self.get_cancel_event(job_id)
+
+        # Provide a shared list for plugins to register subprocess handles
+        proc_list: List = []
+        self._active_processes[job_id] = proc_list
+        kwargs["_active_processes"] = proc_list
+
         try:
             # Update job status
             self._set_job_status(job_id, "downloading")
@@ -251,6 +271,15 @@ class ModelManager:
                     download_plugin.download, model_name, output_dir, **kwargs
                 )
 
+            # Check if job was cancelled while the blocking download was running.
+            # For hubs that use in-process API calls (huggingface, geti, openvino pull), the
+            # download thread cannot be interrupted and may have written files
+            # after cancel_job's initial rmtree. Clean up any residual files.
+            # HF/Geti/OpenVINO-pull: thread finished naturally after cancel
+            if self.is_job_cancelled(job_id):
+                self._handle_cancelled_job(job_id, output_dir, "download_cancelled_after_completion", model_name=model_name)
+                return {"job_id": job_id, "status": "canceled", "model_name": model_name}
+
             # Check if the download was successful
             if isinstance(result, dict) and result.get("success") is False:
                 # Download failed, update job status accordingly
@@ -289,8 +318,15 @@ class ModelManager:
                 "details": result,
             }
 
+        except asyncio.CancelledError:
+            # App shutdown cancelled the task (docker stop/restart/OOM)
+            self._handle_cancelled_job(job_id, output_dir, "download_cancelled_server_exit", model_name=model_name)
+            return {"job_id": job_id, "status": "canceled", "model_name": model_name}
         except Exception as e:
-            # Update job status with error
+            if self.is_job_cancelled(job_id):
+                # Subprocess killed by cancel_job raised an error
+                self._handle_cancelled_job(job_id, output_dir, "download_cancelled_subprocess_killed", model_name=model_name)
+                return {"job_id": job_id, "status": "canceled", "model_name": model_name}
             self._mark_job_failed(job_id, e)
             logger.error(
                 "download_failed",
@@ -330,6 +366,14 @@ class ModelManager:
         Returns:
             Dictionary with job details and status
         """
+        # Ensure a cancel event exists for cooperative cancellation
+        self.get_cancel_event(job_id)
+
+        # Provide a shared list for plugins to register subprocess handles
+        proc_list: List = []
+        self._active_processes[job_id] = proc_list
+        kwargs["_active_processes"] = proc_list
+
         try:
             # Check if hub is 'openvino'
             if hub != "openvino":
@@ -388,6 +432,12 @@ class ModelManager:
                 model_name, output_dir, hf_token=hf_token, **kwargs
             )
 
+            # Check if job was cancelled while the blocking conversion was running
+            # OpenVINO pull (snapshot_download): thread finished naturally after cancel
+            if self.is_job_cancelled(job_id):
+                self._handle_cancelled_job(job_id, output_dir, "conversion_cancelled_after_completion", model_name=model_name)
+                return {"job_id": job_id, "status": "canceled", "model_path": model_path}
+
             self._mark_job_completed(job_id, result)
 
             logger.info("conversion_completed", job_id=job_id, model_path=model_path)
@@ -407,8 +457,15 @@ class ModelManager:
                 "details": result,
             }
 
+        except asyncio.CancelledError:
+            # App shutdown cancelled the task (docker stop/restart/OOM)
+            self._handle_cancelled_job(job_id, output_dir, "conversion_cancelled_server_exit", model_name=model_name)
+            return {"job_id": job_id, "status": "canceled", "model_path": model_path}
         except Exception as e:
-            # Update job status with error
+            if self.is_job_cancelled(job_id):
+                # subprocess killed by cancel_job raised an error
+                self._handle_cancelled_job(job_id, output_dir, "conversion_cancelled_subprocess_killed", model_name=model_name)
+                return {"job_id": job_id, "status": "canceled", "model_path": model_path}
             self._mark_job_failed(job_id, e)
             logger.error(
                 "conversion_failed",
@@ -466,8 +523,8 @@ class ModelManager:
                 # Define the worker function to download a single task
                 def download_task_wrapper(task):
                     try:
-                        # Check if job has been canceled
-                        if self._jobs.get(job_id, {}).get("status") == "canceled":
+                        # Check if job has been canceled via the cancel event
+                        if self.is_job_cancelled(job_id):
                             logger.info("download_task_canceled", task=task.destination)
                             raise InterruptedError("Download was canceled")
 
@@ -669,8 +726,23 @@ class ModelManager:
             result[p_type] = self.registry.get_plugins_by_type(p_type)
         return result
 
+    def register_asyncio_task(self, job_id: str, task: asyncio.Task) -> None:
+        """Associate an asyncio task with a job for cancellation support."""
+        self._asyncio_tasks[job_id] = task
+
+    def is_job_cancelled(self, job_id: str) -> bool:
+        """Check whether a job has been cancelled (thread-safe)."""
+        event = self._cancel_events.get(job_id)
+        return event is not None and event.is_set()
+
+    def get_cancel_event(self, job_id: str) -> threading.Event:
+        """Get or create the cancellation event for a job."""
+        if job_id not in self._cancel_events:
+            self._cancel_events[job_id] = threading.Event()
+        return self._cancel_events[job_id]
+
     def cancel_job(self, job_id: str) -> bool:
-        """Cancel a job if possible."""
+        """Cancel a job if possible, cleaning up partial downloads."""
         with self._jobs_lock:
             if job_id not in self._jobs:
                 return False
@@ -682,11 +754,56 @@ class ModelManager:
                 return False
             self._jobs[job_id]["status"] = "canceled"
             self._jobs[job_id]["completion_time"] = datetime.now().isoformat()
+            output_dir = self._jobs[job_id].get("output_dir")
+
+        # Signal cooperative cancellation to any running thread
+        cancel_event = self._cancel_events.get(job_id)
+        if cancel_event is not None:
+            cancel_event.set()
 
         # If there's an active executor for this job, shut it down
         if job_id in self._executors:
             self._executors[job_id].shutdown(wait=False, cancel_futures=True)
             del self._executors[job_id]
+
+        # Remove the asyncio task reference but do NOT cancel it. The thread
+        # will finish naturally and hit the is_job_cancelled() check which does
+        # final cleanup. Cancelling the task causes CancelledError which races
+        # with threads still writing files (e.g. snapshot_download).
+        self._asyncio_tasks.pop(job_id, None)
+
+        # Kill any active subprocesses registered by plugins
+        active_procs = self._active_processes.pop(job_id, [])
+        for proc in active_procs:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+        # Give processes a moment then force-kill survivors
+        time.sleep(0.5)
+        for proc in active_procs:
+            try:
+                if proc.poll() is None:
+                    proc.kill()
+            except OSError:
+                pass
+
+        # Clean up partially downloaded files
+        if output_dir and os.path.isdir(output_dir):
+            try:
+                shutil.rmtree(output_dir)
+                logger.info("canceled_job_cleanup", job_id=job_id, removed_dir=output_dir)
+            except OSError as e:
+                logger.warning(
+                    "canceled_job_cleanup_failed",
+                    job_id=job_id,
+                    dir=output_dir,
+                    error=str(e),
+                )
+
+        # Do NOT clean up the cancel event here. The background thread needs
+        # to check is_job_cancelled() after it finishes. The event is cleaned
+        # up by _handle_cancelled_job or left to be garbage collected.
 
         logger.info("job_canceled", job_id=job_id)
         return True

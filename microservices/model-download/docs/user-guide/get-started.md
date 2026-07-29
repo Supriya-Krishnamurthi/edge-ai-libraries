@@ -613,6 +613,8 @@ curl -X POST "http://<host-ip>:8200/api/v1/jobs/<job_id>/cancel"
 }
 ```
 
+> **Note:** For hubs that do not support immediate interruption (`huggingface`, `geti`, `openvino`), the response includes an additional `warning` field. The transfer may continue briefly in the background; partial files are cleaned up automatically.
+
 **Upload a custom model ZIP:**
 
 Use this endpoint when user (or another client app) needs to upload a local model directly to model-download.

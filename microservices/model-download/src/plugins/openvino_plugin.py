@@ -687,7 +687,8 @@ class OpenVINOConverter(ModelDownloadPlugin):
                 target_device=target_device,
                 model_directory=output_dir,
                 version=version,
-                config_dict=config_for_export
+                config_dict=config_for_export,
+                active_processes=kwargs.get("_active_processes"),
             )
 
             host_path = output_dir
@@ -741,6 +742,7 @@ class OpenVINOConverter(ModelDownloadPlugin):
         model_directory: str,
         version: str = "",
         config_dict: Optional[Dict[str, Any]] = None,
+        active_processes=None,
     ):
         """
         Convert a downloaded model to OpenVINO Model Server (OVMS) format using export_model.py.
@@ -834,6 +836,9 @@ class OpenVINOConverter(ModelDownloadPlugin):
                 text=True,
                 env=export_env,
             )
+            # Register for cancellation support
+            if active_processes is not None:
+                active_processes.append(result)
             stderr_logs = deque(maxlen=3)
             stdout_logs = deque(maxlen=3)
             # Stream output in real-time
@@ -872,6 +877,8 @@ class OpenVINOConverter(ModelDownloadPlugin):
                         text=True,
                         env=export_env,
                     )
+                    if active_processes is not None:
+                        active_processes.append(result)
 
                     # Stream output in real-time
                     while True:

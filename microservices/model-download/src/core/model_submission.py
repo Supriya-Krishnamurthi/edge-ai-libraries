@@ -156,7 +156,7 @@ async def submit_models(
                     "Unable to prepare the requested destination under MODELS_DIR."
                 ) from error
             job_ids.append(download_job_id)
-            schedule_background_task(
+            task = schedule_background_task(
                 model_manager.process_download(
                     job_id=download_job_id,
                     model_name=model.name,
@@ -168,6 +168,7 @@ async def submit_models(
                 background_tasks,
                 name=f"model-download-{download_job_id}",
             )
+            model_manager.register_asyncio_task(download_job_id, task)
 
         if needs_conversion:
             is_openvino_available, openvino_error = plugin_registry.hub_is_available("openvino")
@@ -213,7 +214,7 @@ async def submit_models(
                     "Unable to prepare the requested destination under MODELS_DIR."
                 ) from error
             job_ids.append(convert_job_id)
-            schedule_background_task(
+            task = schedule_background_task(
                 model_manager.process_conversion(
                     job_id=convert_job_id,
                     model_path=model_download_path,
@@ -229,5 +230,6 @@ async def submit_models(
                 background_tasks,
                 name=f"model-conversion-{convert_job_id}",
             )
+            model_manager.register_asyncio_task(convert_job_id, task)
 
     return job_ids
