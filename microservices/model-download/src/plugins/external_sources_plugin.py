@@ -93,7 +93,22 @@ class ExternalSourcesPlugin(ModelDownloadPlugin):
     def plugin_type(self) -> str:
         return "downloader"
 
-    def config_keys(self) -> List[PluginConfigKey]:
+    def hub_config_keys(self, hub: str) -> List[PluginConfigKey]:
+        """Return config keys applicable to a specific hub.
+
+        Each hub has its own private method so keys can evolve independently.
+        """
+        normalized = (hub or "").lower().replace("_", "-")
+        if normalized == "remote-url":
+            return self._remote_url_config_keys()
+        if normalized == "omz":
+            return self._omz_config_keys()
+        if normalized == "pipeline-zoo-models":
+            return self._pipeline_zoo_config_keys()
+        return []
+
+    @staticmethod
+    def _remote_url_config_keys() -> List[PluginConfigKey]:
         return [
             PluginConfigKey(
                 name="EXTERNAL_SOURCES_URL_ALLOWLIST",
@@ -105,6 +120,15 @@ class ExternalSourcesPlugin(ModelDownloadPlugin):
             ),
         ]
 
+    @staticmethod
+    def _omz_config_keys() -> List[PluginConfigKey]:
+        # No keys today; add OMZ-specific keys here when needed.
+        return []
+
+    @staticmethod
+    def _pipeline_zoo_config_keys() -> List[PluginConfigKey]:
+        # No keys today; add OMZ-specific keys here when needed.
+        return []
     def plugin_supported_hubs(self) -> List[str]:
         """Return all hub names this plugin serves."""
         return list(_load_profile().keys())

@@ -477,6 +477,7 @@ async def list_plugins():
             if len(plugin_supported_hubs) > 1:
                 hub_description = getattr(plugin, "hub_description", None)
                 hub_capabilities = getattr(plugin, "hub_capabilities", None)
+                hub_config_keys_fn = getattr(plugin, "hub_config_keys", None)
                 for hub in plugin_supported_hubs:
                     is_available, _ = plugin_registry.hub_is_available(hub)
                     if not is_available:
@@ -490,12 +491,30 @@ async def list_plugins():
                     if callable(hub_capabilities):
                         hub_caps.update(hub_capabilities(hub))
 
+                    # Config keys may differ per hub in multi-hub plugin(e.g. allowlist only for remote-url).
+                    per_hub_config_keys = config_keys
+                    if callable(hub_config_keys_fn):
+                        try:
+                            raw = hub_config_keys_fn(hub)
+                            per_hub_config_keys = [
+                                {
+                                    "name": key.name,
+                                    "description": key.description,
+                                    "sensitive": key.sensitive,
+                                    "required": key.required,
+                                    "group": key.group,
+                                }
+                                for key in raw
+                            ]
+                        except Exception:
+                            per_hub_config_keys = config_keys
+
                     plugins_info[plugin_type].append({
                         "name": hub,
                         "type": plugin_type,
                         "description": hub_desc or "No description available",
                         "capabilities": hub_caps,
-                        "config_keys": config_keys,
+                        "config_keys": per_hub_config_keys,
                         "available": True,
                         "unavailable_reason": None,
                     })

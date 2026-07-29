@@ -176,6 +176,17 @@ class OpenVINOConverter(ModelDownloadPlugin):
     def can_handle(self, model_name: str, hub: str, **kwargs) -> bool:
         # Check if the hub is openvino or if is_ovms is True
         return hub.lower() == "openvino" or kwargs.get("is_ovms", False)
+
+    def validate_credentials(
+        self, resolved_config: Dict[str, Any], timeout: int = 5
+    ) -> Dict[str, Any]:
+        """Validate the HF_TOKEN used for pulling pre-converted models or source downloads.
+
+        Delegates to HuggingFacePlugin since OpenVINO conversion relies on
+        HuggingFace for model access.
+        """
+        from src.plugins.huggingface_plugin import HuggingFacePlugin
+        return HuggingFacePlugin().validate_credentials(resolved_config, timeout)
     
     def _get_param(self, param_name: str, config: Dict[str, Any], kwargs: Dict[str, Any], default_value: Any = None) -> Any:
         """

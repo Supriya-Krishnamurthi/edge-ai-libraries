@@ -216,6 +216,9 @@ class ModelManager:
             # Resolve per-request overrides for the selected plugin and expose
             # them via 'resolved_config'. Values are scoped to this call only.
             kwargs["resolved_config"] = download_plugin.resolve_config(request_credentials)
+            # validate_credentials is consumed at submission time; drop it so
+            # it does not leak into plugin download/convert kwargs.
+            kwargs.pop("validate_credentials", None)
 
             # Check if the plugin supports parallel downloading via tasks
             use_parallel = kwargs.pop("parallel_downloads", True)
@@ -418,6 +421,9 @@ class ModelManager:
             # Resolve per-request overrides for the converter (override wins,
             # env fallback); scoped to this call only.
             kwargs["resolved_config"] = convert_plugin.resolve_config(request_credentials)
+            # validate_credentials is consumed at submission time; drop it so
+            # it does not leak into plugin convert kwargs.
+            kwargs.pop("validate_credentials", None)
 
             # Execute the conversion
             logger.info(

@@ -202,6 +202,36 @@ class ModelDownloadPlugin(ABC):
             "success": True
         }
     
+    def validate_credentials(
+        self, resolved_config: Dict[str, Any], timeout: int = 5
+    ) -> Dict[str, Any]:
+        """Lightweight, idempotent credential pre-check.
+
+        Called when the request sets ``validate_credentials: true``.  Plugins
+        with sensitive config keys (tokens, passwords) override this to
+        perform a cheap connectivity / auth check (e.g. ``whoami``) against
+        the resolved credentials (override if provided, env otherwise).
+
+        Plugins without sensitive keys (hls, ollama, ultralytics, etc.)
+        inherit this default which returns "no credentials required".
+
+        Returns:
+            ``{"name": str, "ok": bool, "message": str}``
+        """
+        return {
+            "name": "credentials",
+            "ok": True,
+            "message": "No credentials required for this plugin",
+        }
+
+    def hub_config_keys(self, hub: str) -> List[PluginConfigKey]:
+        """Return config keys applicable to a specific hub.
+
+        Multi-hub plugins can override this to expose different keys per hub.
+        The default returns all keys from ``config_keys()``.
+        """
+        return self.config_keys()
+
     @abstractmethod
     async def download(self, model_name: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         pass

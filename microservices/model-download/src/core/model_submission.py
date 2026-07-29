@@ -121,11 +121,24 @@ async def submit_models(
             )
         if model.is_ovms and plugin is None:
             plugin = plugin_registry.get_plugin("converter", "openvino")
-        if request_credentials and plugin is not None:
-            try:
-                plugin.resolve_config(request_credentials)
-            except ValueError as error:
-                raise ModelSubmissionError(str(error)) from error
+        if plugin is not None:
+            # Validate override keys are recognised by the plugin.
+            if request_credentials:
+                try:
+                    plugin.resolve_config(request_credentials)
+                except ValueError as error:
+                    raise ModelSubmissionError(str(error)) from error
+
+            # Opt-in credential pre-check: fail fast before creating a job.
+            if extra_kwargs.get("validate_credentials"):
+                resolved = plugin.resolve_config(request_credentials)
+                validation = plugin.validate_credentials(resolved)
+                if not validation.get("ok"):
+                    raise ModelSubmissionError(
+                        f"Credential validation failed [{validation['name']}]: "
+                        f"{validation['message']}"
+                    )
+                logger.info("credential_validation_passed", plugin=plugin.plugin_name)
 
         logger.info(
             "model_submission_started",

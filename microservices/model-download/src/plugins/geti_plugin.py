@@ -193,6 +193,54 @@ class GetiPlugin(ModelDownloadPlugin):
     def supports_listing(self) -> bool:
         return True
 
+    def validate_credentials(
+        self, resolved_config: Dict[str, Any], timeout: int = 5
+    ) -> Dict[str, Any]:
+        """Validate Geti credentials by connecting and listing projects.
+
+        Checks GETI_HOST reachability and GETI_TOKEN validity in a single
+        lightweight call. Never fetches full project data.
+        """
+        session = self._build_session(resolved_config)
+
+        if not session.server_url or not session.api_token:
+            return {
+                "name": "geti_config",
+                "ok": False,
+                "message": (
+                    "GETI_HOST and GETI_TOKEN are required. Provide them via "
+                    "environment variables or override_credentials."
+                ),
+            }
+
+        try:
+            self._initialize_geti_sdk(session)
+            project_client = ProjectClient(
+                session=session.geti.session,
+                workspace_id=session.geti.workspace_id,
+            )
+            projects = project_client.list_projects()
+            return {
+                "name": "geti_auth",
+                "ok": True,
+                "message": (
+                    f"Connected to {session.server_url}, "
+                    f"{len(projects)} project(s) accessible"
+                ),
+            }
+        except GetiRequestException as exc:
+            return {
+                "name": "geti_auth",
+                "ok": False,
+                "message": f"Geti API error: {exc}",
+            }
+        except Exception as exc:
+            return {
+                "name": "geti_connectivity",
+                "ok": False,
+                "message": f"Cannot connect to Geti at {session.server_url}: {exc}",
+            }
+
     @property
     def listing_filter_fields(self) -> List[str]:
         return GETI_LISTING_FILTER_FIELDS
