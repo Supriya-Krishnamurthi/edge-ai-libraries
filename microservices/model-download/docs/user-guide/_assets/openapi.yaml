@@ -136,6 +136,21 @@ components:
         config:
           $ref: "#/components/schemas/Config"
           description: Configuration for OpenVINO conversion (required if is_ovms is true)
+        override_credentials:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+          description: >
+            Per-request credential overrides (e.g. HF_TOKEN, GETI_HOST).
+            Takes precedence over environment variables for this request only.
+        validate_credentials:
+          type: boolean
+          default: false
+          description: >
+            When true, performs a lightweight credential check before starting
+            the download/conversion. Validates override_credentials if present,
+            otherwise validates environment credentials. Fails fast with 400 if invalid.
 
     ModelDownloadRequest:
       type: object

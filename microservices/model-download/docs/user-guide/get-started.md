@@ -594,6 +594,24 @@ curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=remote_
 
 > **Note:** The response format for downloads with `override_credentials` is the same as shown in the response section above for the corresponding hub plugin.
 
+**Pre-validate credentials before download:**
+
+Add `"validate_credentials": true` to any model in the request to perform a fast credential check before the download or conversion begins. If `override_credentials` is present, those values are validated; otherwise the service's environment credentials are checked. This is especially useful for `is_ovms` conversions where invalid credentials would otherwise surface only after minutes of processing.
+
+```json
+{
+  "models": [{
+    "name": "meta-llama/Llama-3.1-8B",
+    "hub": "openvino",
+    "is_ovms": true,
+    "validate_credentials": true,
+    "override_credentials": { "HF_TOKEN": "<base64-token>" }
+  }]
+}
+```
+
+If the credentials are invalid, the request returns `400` immediately without starting the job.
+
 
 **Cancel a running or queued job:**
 
