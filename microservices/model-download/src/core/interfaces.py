@@ -64,17 +64,6 @@ class ModelDownloadPlugin(ABC):
         """
         return False
 
-    def hub_config_keys(self, hub: str) -> List[PluginConfigKey]:
-        """
-        Return the connection/configuration keys this plugin consumes.
-
-        Each key can be overridden per request; the matching environment
-        variable is the fallback default. Plugins that need credentials or
-        external-service settings override this so the keys are discoverable
-        through GET /plugins and eligible for per-request overrides for free.
-        """
-        return []
-
     def resolve_config(self, overrides: Optional[Dict[str, Any]] = None, hub: Optional[str] = None) -> Dict[str, Any]:
         """
         Resolve this plugin's declared config keys for a single request.
@@ -243,9 +232,9 @@ class ModelDownloadPlugin(ABC):
         """Return config keys applicable to a specific hub.
 
         Multi-hub plugins can override this to expose different keys per hub.
-        The default returns all keys from ``config_keys()``.
+        Plugins without per-hub config can inherit this default.
         """
-        return self.config_keys()
+        return []
 
     @abstractmethod
     async def download(self, model_name: str, output_dir: str, **kwargs) -> Dict[str, Any]:

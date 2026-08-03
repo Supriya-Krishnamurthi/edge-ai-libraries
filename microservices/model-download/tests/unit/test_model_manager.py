@@ -13,7 +13,7 @@ async def test_process_download_refreshes_credentials_for_each_request(tmp_path)
     registry = MagicMock()
     download_plugin = MagicMock()
     download_plugin.plugin_name = "huggingface"
-    download_plugin.resolve_config.side_effect = lambda overrides: overrides.copy()
+    download_plugin.resolve_config.side_effect = lambda overrides, hub=None: overrides.copy()
     download_plugin.download = AsyncMock(return_value={"success": True})
     registry.get_plugin.return_value = download_plugin
 

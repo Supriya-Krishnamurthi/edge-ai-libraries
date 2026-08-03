@@ -249,6 +249,8 @@ class ExternalSourcesPlugin(ModelDownloadPlugin):
             hub == "omz" and "," in model_name
         )
         target_dir = os.path.join(output_dir, hub) if is_multi else os.path.join(output_dir, hub, model_name)
+        # Register the exact dir so cancellation cleans up only this model.
+        kwargs.get("_model_download_dir", []).append(target_dir)
 
         # The 'remote-url' hub takes the archive URL from the request and validates
         # it against the allowlist before download.

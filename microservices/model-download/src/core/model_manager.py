@@ -56,6 +56,7 @@ class ModelManager:
         self._cancel_events: Dict[str, threading.Event] = {}  # Cancellation signals per job
         self._asyncio_tasks: Dict[str, asyncio.Task] = {}  # Asyncio tasks per job
         self._active_processes: Dict[str, List] = {}  # Subprocess handles per job
+        self._model_download_dir: Dict[str, List[str]] = {}  # Exact model dirs a plugin created, per job
         self._jobs_lock = threading.RLock()
         os.makedirs(self.default_dir, exist_ok=True)
         logger.info("model_manager_initialized", default_dir=self.default_dir)
@@ -142,10 +143,32 @@ class ModelManager:
             if result is not None:
                 job["result"] = result
 
-    def _handle_cancelled_job(self, job_id: str, output_dir: Optional[str], log_event: str, **log_extra) -> None:
+    def _cleanup_model_download_dir(self, job_id: str) -> None:
+        """Remove only the exact model directories a plugin created for this job.
+
+        Plugins register the precise leaf dir they write to (precision-specific
+        for geti/openvino) via the shared ``_model_download_dir`` list. Only those dirs
+        are removed, and each must stay strictly under the models root — the
+        root itself is never deleted, so sibling models, other hubs, and other
+        precisions of the same model are left intact.
+        """
+        root = self.default_dir
+
+        for path in self._model_download_dir.get(job_id, []):
+            if not path:
+                continue
+            candidate = os.path.abspath(path)
+            # Safety: never delete the models root or anything outside it.
+            if candidate == root or os.path.commonpath([root, candidate]) != root:
+                continue
+            if os.path.isdir(candidate):
+                shutil.rmtree(candidate, ignore_errors=True)
+                logger.info("canceled_job_cleanup", job_id=job_id, removed_dir=candidate)
+
+    def _handle_cancelled_job(self, job_id: str, log_event: str, **log_extra) -> None:
         """Clean up residual files for a cancelled job and log the event."""
-        if output_dir and os.path.isdir(output_dir):
-            shutil.rmtree(output_dir, ignore_errors=True)
+        self._cleanup_model_download_dir(job_id)
+        self._model_download_dir.pop(job_id, None)
         self._cancel_events.pop(job_id, None)
         logger.info(log_event, job_id=job_id, **log_extra)
 
@@ -179,6 +202,12 @@ class ModelManager:
         proc_list: List = []
         self._active_processes[job_id] = proc_list
         kwargs["_active_processes"] = proc_list
+
+        # Provide a shared list for plugins to register the exact model dir(s)
+        # they create, so cancellation removes only those (precision-safe).
+        model_dirs: List[str] = []
+        self._model_download_dir[job_id] = model_dirs
+        kwargs["_model_download_dir"] = model_dirs
 
         try:
             # Update job status
@@ -280,7 +309,7 @@ class ModelManager:
             # after cancel_job's initial rmtree. Clean up any residual files.
             # HF/Geti/OpenVINO-pull: thread finished naturally after cancel
             if self.is_job_cancelled(job_id):
-                self._handle_cancelled_job(job_id, output_dir, "download_cancelled_after_completion", model_name=model_name)
+                self._handle_cancelled_job(job_id, "download_cancelled_after_completion", model_name=model_name)
                 return {"job_id": job_id, "status": "canceled", "model_name": model_name}
 
             # Check if the download was successful
@@ -305,9 +334,11 @@ class ModelManager:
             self._mark_job_completed(job_id, result)
 
             logger.info("download_completed", job_id=job_id, model_name=model_name)
-            
-            # Convert container path to host path if applicable
-            host_path = output_dir
+
+            # Report the exact model dir the plugin created (same path used for
+            # cancellation cleanup). Falls back to output_dir if none registered.
+            registered = self._model_download_dir.get(job_id) or []
+            host_path = registered[-1] if registered else output_dir
             if host_path and isinstance(host_path, str) and host_path.startswith("/opt/models/"):
                 host_prefix = os.getenv("MODEL_PATH", "models")
                 host_path = host_path.replace("/opt/models/", f"{host_prefix}/")
@@ -323,12 +354,12 @@ class ModelManager:
 
         except asyncio.CancelledError:
             # App shutdown cancelled the task (docker stop/restart/OOM)
-            self._handle_cancelled_job(job_id, output_dir, "download_cancelled_server_exit", model_name=model_name)
+            self._handle_cancelled_job(job_id, "download_cancelled_server_exit", model_name=model_name)
             return {"job_id": job_id, "status": "canceled", "model_name": model_name}
         except Exception as e:
             if self.is_job_cancelled(job_id):
                 # Subprocess killed by cancel_job raised an error
-                self._handle_cancelled_job(job_id, output_dir, "download_cancelled_subprocess_killed", model_name=model_name)
+                self._handle_cancelled_job(job_id, "download_cancelled_subprocess_killed", model_name=model_name)
                 return {"job_id": job_id, "status": "canceled", "model_name": model_name}
             self._mark_job_failed(job_id, e)
             logger.error(
@@ -376,6 +407,12 @@ class ModelManager:
         proc_list: List = []
         self._active_processes[job_id] = proc_list
         kwargs["_active_processes"] = proc_list
+
+        # Provide a shared list for plugins to register the exact model dir(s)
+        # they create, so cancellation removes only those (precision-safe).
+        model_dirs: List[str] = []
+        self._model_download_dir[job_id] = model_dirs
+        kwargs["_model_download_dir"] = model_dirs
 
         try:
             # Check if hub is 'openvino'
@@ -441,7 +478,7 @@ class ModelManager:
             # Check if job was cancelled while the blocking conversion was running
             # OpenVINO pull (snapshot_download): thread finished naturally after cancel
             if self.is_job_cancelled(job_id):
-                self._handle_cancelled_job(job_id, output_dir, "conversion_cancelled_after_completion", model_name=model_name)
+                self._handle_cancelled_job(job_id, "conversion_cancelled_after_completion", model_name=model_name)
                 return {"job_id": job_id, "status": "canceled", "model_path": model_path}
 
             self._mark_job_completed(job_id, result)
@@ -465,12 +502,12 @@ class ModelManager:
 
         except asyncio.CancelledError:
             # App shutdown cancelled the task (docker stop/restart/OOM)
-            self._handle_cancelled_job(job_id, output_dir, "conversion_cancelled_server_exit", model_name=model_name)
+            self._handle_cancelled_job(job_id, "conversion_cancelled_server_exit", model_name=model_name)
             return {"job_id": job_id, "status": "canceled", "model_path": model_path}
         except Exception as e:
             if self.is_job_cancelled(job_id):
                 # subprocess killed by cancel_job raised an error
-                self._handle_cancelled_job(job_id, output_dir, "conversion_cancelled_subprocess_killed", model_name=model_name)
+                self._handle_cancelled_job(job_id, "conversion_cancelled_subprocess_killed", model_name=model_name)
                 return {"job_id": job_id, "status": "canceled", "model_path": model_path}
             self._mark_job_failed(job_id, e)
             logger.error(
@@ -760,7 +797,6 @@ class ModelManager:
                 return False
             self._jobs[job_id]["status"] = "canceled"
             self._jobs[job_id]["completion_time"] = datetime.now().isoformat()
-            output_dir = self._jobs[job_id].get("output_dir")
 
         # Signal cooperative cancellation to any running thread
         cancel_event = self._cancel_events.get(job_id)
@@ -794,18 +830,9 @@ class ModelManager:
             except OSError:
                 pass
 
-        # Clean up partially downloaded files
-        if output_dir and os.path.isdir(output_dir):
-            try:
-                shutil.rmtree(output_dir)
-                logger.info("canceled_job_cleanup", job_id=job_id, removed_dir=output_dir)
-            except OSError as e:
-                logger.warning(
-                    "canceled_job_cleanup_failed",
-                    job_id=job_id,
-                    dir=output_dir,
-                    error=str(e),
-                )
+        # Clean up only the exact model dir(s) this job created, never the
+        # shared download_path base (which may hold other models/hubs/precisions).
+        self._cleanup_model_download_dir(job_id)
 
         # Do NOT clean up the cancel event here. The background thread needs
         # to check is_job_cancelled() after it finishes. The event is cleaned

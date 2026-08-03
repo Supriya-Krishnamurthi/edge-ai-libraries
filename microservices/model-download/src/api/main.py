@@ -492,7 +492,7 @@ async def list_plugins():
                         "type": plugin_type,
                         "description": hub_desc or "No description available",
                         "capabilities": hub_caps,
-                        "config_keys": get_hub_config_keys(plugin, hub),
+                        "hub_config_keys": get_hub_config_keys(plugin, hub),
                         "available": True,
                         "unavailable_reason": None,
                     })
@@ -513,7 +513,7 @@ async def list_plugins():
                 "type": plugin_type,
                 "description": description,
                 "capabilities": capabilities,
-                "config_keys": get_hub_config_keys(plugin, plugin_name),
+                "hub_config_keys": get_hub_config_keys(plugin, plugin_name),
                 "available": is_available,
                 "unavailable_reason": reason if not is_available else None
             }

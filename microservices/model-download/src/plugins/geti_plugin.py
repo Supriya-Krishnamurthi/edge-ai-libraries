@@ -769,6 +769,8 @@ class GetiPlugin(ModelDownloadPlugin):
                 model_dir = os.path.join(output_dir, "geti", model_name_lower, precision_lower)
             
             os.makedirs(model_dir, exist_ok=True)
+            # Register the exact precision dir so cancellation removes only this variant.
+            kwargs.get("_model_download_dir", []).append(model_dir)
             await asyncio.to_thread(model_client._download_model, model_to_download, model_dir)
             await self.extract_model_files(model_dir)
             return model_dir, None, ignored_fields
@@ -946,7 +948,8 @@ class GetiPlugin(ModelDownloadPlugin):
                 optimized_model_id=config.get("optimized_model_id"),
                 precision=precision,
                 model_format=model_format,
-                extra_filters=extra_filters
+                extra_filters=extra_filters,
+                _model_download_dir=kwargs.get("_model_download_dir"),
             )
             
             if not model_path:

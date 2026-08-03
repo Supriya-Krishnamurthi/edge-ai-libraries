@@ -341,8 +341,8 @@ class TestRuntimeUrlValidation:
             "github.com/envorg/",
         ]
 
-    def test_config_keys_declares_allowlist(self, plugin):
-        keys = {key.name: key for key in plugin.config_keys()}
+    def test_hub_config_keys_declares_allowlist(self, plugin):
+        keys = {key.name: key for key in plugin.hub_config_keys("remote-url")}
         assert "EXTERNAL_SOURCES_URL_ALLOWLIST" in keys
         assert keys["EXTERNAL_SOURCES_URL_ALLOWLIST"].sensitive is False
 

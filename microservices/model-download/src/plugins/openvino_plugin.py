@@ -14,7 +14,7 @@ from src.utils.logging import logger
 
 # Default OVMS release tag for export_model.py script
 OVMS_RELEASE_TAG = os.getenv("OVMS_RELEASE_TAG", "v2026.0")
-INTERNAL_CONFIG_PARAMS = frozenset({"resolved_config"})
+INTERNAL_CONFIG_PARAMS = frozenset({"resolved_config", "_active_processes", "_model_download_dir"})
 
 # Graph templates for OVMS serving configuration (aligned with export_model.py)
 TEXT_GENERATION_GRAPH_TEMPLATE = """# OVMS_GRAPH_QUEUE_MAX_SIZE: AUTO
@@ -618,6 +618,10 @@ class OpenVINOConverter(ModelDownloadPlugin):
         huggingface_token = resolved_config.get("HF_TOKEN") or hf_token
         model_type = kwargs.get("type", kwargs.get("model_type", "llm"))
         version = kwargs.get("version", "")
+
+        # Register the exact model dir so cancellation removes only this model's
+        # precision folder, never sibling models or other precisions.
+        kwargs.get("_model_download_dir", []).append(os.path.join(output_dir, model_name))
 
         # --- Pull Mode: Try to find and download a pre-converted model first ---
         logger.info(f"Attempting pull mode for model: {model_name}, precision: {weight_format}, device: {target_device}")

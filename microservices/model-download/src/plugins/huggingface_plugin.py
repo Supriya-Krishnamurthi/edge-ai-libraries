@@ -221,6 +221,8 @@ class HuggingFacePlugin(ModelDownloadPlugin):
         hub_dir = os.path.join(output_dir, "huggingface")
         model_specific_path = os.path.join(hub_dir, model_name.replace("/", "_"))
         os.makedirs(model_specific_path, exist_ok=True)
+        # Register the exact dir so cancellation cleans up only this model.
+        kwargs.get("_model_download_dir", []).append(model_specific_path)
 
         logger.info(f"Downloading HuggingFace model {model_name} to {model_specific_path}")
         # Verify access up-front: a gated/unauthorized repo otherwise surfaces as a

@@ -44,6 +44,8 @@ class OllamaPlugin(ModelDownloadPlugin):
             model_name.replace("/", "_") , (f"{revision}" if revision else "")
         )
         model_name = model_name + (f":{revision}" if revision else "")
+        # Register the exact dir so cancellation cleans up only this model.
+        kwargs.get("_model_download_dir", []).append(model_download_path)
         logger.info(f"Waiting for Ollama download lock: {model_name}")
         with _ollama_download_lock:
             try:

@@ -88,6 +88,7 @@ class UltralyticsDownloader(ModelDownloadPlugin):
         
         # Create hub-specific directory under the output directory
         hub_dir = os.path.join(output_dir, "ultralytics")
+        kwargs.get("_model_download_dir", []).append(hub_dir)
         
         # Call the download script
         active_processes = kwargs.get("_active_processes")
