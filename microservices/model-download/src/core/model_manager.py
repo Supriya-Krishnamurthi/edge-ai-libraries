@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import json
 import shutil
 import time
 import uuid
@@ -143,6 +144,81 @@ class ModelManager:
             if result is not None:
                 job["result"] = result
 
+    @staticmethod
+    def _cleanup_stale_config_all(parent_dir: str) -> None:
+        """Prune stale config_all.json entries whose base_path no longer exists.
+
+        After model-leaf deletion, this removes stale model entries from the
+        per-precision metadata file. If no entries remain, config_all.json is
+        deleted so now-empty directories can be pruned.
+        """
+        config_path = os.path.join(parent_dir, "config_all.json")
+        if not os.path.isfile(config_path):
+            return
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as file:
+                config_data = json.load(file)
+        except (OSError, json.JSONDecodeError):
+            return
+
+        entries = config_data.get("model_config_list")
+        if not isinstance(entries, list):
+            return
+
+        kept_entries = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                kept_entries.append(entry)
+                continue
+
+            base_path = entry.get("config", {}).get("base_path")
+            if not base_path:
+                kept_entries.append(entry)
+                continue
+
+            candidate = os.path.abspath(os.path.join(parent_dir, base_path))
+            if os.path.exists(candidate):
+                kept_entries.append(entry)
+
+        # None of the models are deleted
+        if len(kept_entries) == len(entries):
+            return
+
+        try:
+            # some models are deleted
+            if kept_entries:
+                config_data["model_config_list"] = kept_entries
+                with open(config_path, "w", encoding="utf-8") as file:
+                    json.dump(config_data, file, indent=4)
+
+            # all models are deleted
+            else:
+                os.remove(config_path)
+        except OSError:
+            return
+
+    def _prune_empty_parents(self, path: str) -> None:
+        """Prune empty parent dirs of ``path`` up to (but excluding) models root."""
+        root = self.default_dir
+        current = os.path.abspath(os.path.dirname(path))
+
+        while current != root and os.path.commonpath([root, current]) == root:
+            if not os.path.isdir(current):
+                break
+
+            # Keep per-precision metadata consistent before checking emptiness.
+            self._cleanup_stale_config_all(current)
+
+            try:
+                if os.listdir(current):
+                    break
+                os.rmdir(current)
+            except OSError:
+                break
+
+            current = os.path.abspath(os.path.dirname(current))
+
     def _cleanup_model_download_dir(self, job_id: str) -> None:
         """Remove only the exact model directories a plugin created for this job.
 
@@ -164,6 +240,14 @@ class ModelManager:
             if os.path.isdir(candidate):
                 shutil.rmtree(candidate, ignore_errors=True)
                 logger.info("canceled_job_cleanup", job_id=job_id, removed_dir=candidate)
+            elif os.path.isfile(candidate):
+                try:
+                    os.remove(candidate)
+                    logger.info("canceled_job_cleanup", job_id=job_id, removed_file=candidate)
+                except OSError:
+                    continue
+
+            self._prune_empty_parents(candidate)
 
     def _handle_cancelled_job(self, job_id: str, log_event: str, **log_extra) -> None:
         """Clean up residual files for a cancelled job and log the event."""

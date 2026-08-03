@@ -620,7 +620,7 @@ class OpenVINOConverter(ModelDownloadPlugin):
         version = kwargs.get("version", "")
 
         # Register the exact model dir so cancellation removes only this model's
-        # precision folder, never sibling models or other precisions.
+        # folder within the precision tree, never sibling models/precisions.
         kwargs.get("_model_download_dir", []).append(os.path.join(output_dir, model_name))
 
         # --- Pull Mode: Try to find and download a pre-converted model first ---

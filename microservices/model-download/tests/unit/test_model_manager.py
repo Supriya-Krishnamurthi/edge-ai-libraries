@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from unittest.mock import AsyncMock, MagicMock
+import json
 
 import pytest
 
@@ -255,3 +256,83 @@ async def test_process_download_returns_canceled_when_subprocess_killed(tmp_path
         downloader="ollama",
     )
     assert result["status"] == "canceled"
+
+
+def test_cleanup_prunes_empty_parents_and_removes_empty_config_all(tmp_path):
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("convert", "microsoft/Phi-3.5-mini-instruct", "openvino", str(tmp_path))
+
+    leaf = tmp_path / "openvino_models" / "cpu" / "int8" / "microsoft" / "Phi-3.5-mini-instruct"
+    leaf.mkdir(parents=True)
+    config_path = tmp_path / "openvino_models" / "cpu" / "int8" / "config_all.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps(
+            {
+                "model_config_list": [
+                    {
+                        "config": {
+                            "name": "microsoft/Phi-3.5-mini-instruct",
+                            "base_path": "microsoft/Phi-3.5-mini-instruct",
+                        }
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager._model_download_dir[job_id] = [str(leaf)]
+    manager._cleanup_model_download_dir(job_id)
+
+    assert not leaf.exists()
+    assert not config_path.exists()
+    assert not (tmp_path / "openvino_models" / "cpu" / "int8").exists()
+
+
+def test_cleanup_keeps_config_all_for_remaining_models(tmp_path):
+    registry = MagicMock()
+    manager = ModelManager(registry, default_dir=str(tmp_path))
+    job_id = manager.register_job("convert", "microsoft/Phi-3.5-mini-instruct", "openvino", str(tmp_path))
+
+    parent = tmp_path / "openvino_models" / "cpu" / "int8" / "microsoft"
+    removed_leaf = parent / "Phi-3.5-mini-instruct"
+    kept_leaf = parent / "Phi-4-mini"
+    removed_leaf.mkdir(parents=True)
+    kept_leaf.mkdir(parents=True)
+
+    config_path = tmp_path / "openvino_models" / "cpu" / "int8" / "config_all.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps(
+            {
+                "model_config_list": [
+                    {
+                        "config": {
+                            "name": "microsoft/Phi-3.5-mini-instruct",
+                            "base_path": "microsoft/Phi-3.5-mini-instruct",
+                        }
+                    },
+                    {
+                        "config": {
+                            "name": "microsoft/Phi-4-mini",
+                            "base_path": "microsoft/Phi-4-mini",
+                        }
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager._model_download_dir[job_id] = [str(removed_leaf)]
+    manager._cleanup_model_download_dir(job_id)
+
+    assert not removed_leaf.exists()
+    assert kept_leaf.exists()
+    assert config_path.exists()
+
+    data = json.loads(config_path.read_text(encoding="utf-8"))
+    names = [entry["config"]["name"] for entry in data.get("model_config_list", [])]
+    assert names == ["microsoft/Phi-4-mini"]
