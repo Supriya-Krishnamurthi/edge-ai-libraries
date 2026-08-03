@@ -78,8 +78,6 @@ def _load_omz_rules() -> Dict[str, Dict[str, Any]]:
     return rules
 
 
-
-
 class ExternalSourcesPlugin(ModelDownloadPlugin):
     """Combined downloader for external hubs (tarball + OMZ)."""
 
@@ -129,6 +127,7 @@ class ExternalSourcesPlugin(ModelDownloadPlugin):
     def _pipeline_zoo_config_keys() -> List[PluginConfigKey]:
         # No keys today; add OMZ-specific keys here when needed.
         return []
+
     def plugin_supported_hubs(self) -> List[str]:
         """Return all hub names this plugin serves."""
         return list(_load_profile().keys())

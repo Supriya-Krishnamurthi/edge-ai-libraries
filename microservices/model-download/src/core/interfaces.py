@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 
+MAX_OVERRIDE_CREDENTIAL_LENGTH = 8 * 1024  # 8 KiB (Max Token Base64-encoded size. Ex:JWT)
+
 class DownloadTask:
     """
     Represents a sub-task in a model download process.
@@ -62,7 +64,7 @@ class ModelDownloadPlugin(ABC):
         """
         return False
 
-    def config_keys(self) -> List[PluginConfigKey]:
+    def hub_config_keys(self, hub: str) -> List[PluginConfigKey]:
         """
         Return the connection/configuration keys this plugin consumes.
 
@@ -73,7 +75,7 @@ class ModelDownloadPlugin(ABC):
         """
         return []
 
-    def resolve_config(self, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def resolve_config(self, overrides: Optional[Dict[str, Any]] = None, hub: Optional[str] = None) -> Dict[str, Any]:
         """
         Resolve this plugin's declared config keys for a single request.
 
@@ -83,15 +85,24 @@ class ModelDownloadPlugin(ABC):
         rejected, and grouped keys are resolved together (see PluginConfigKey).
         """
         overrides = overrides or {}
-        declared = {key.name: key for key in self.config_keys()}
+        keys = self.hub_config_keys(hub)
+        declared = {key.name: key for key in keys}
 
         # Reject any override key the plugin does not understand.
         for name in overrides:
             if name not in declared:
                 allowed = ", ".join(sorted(declared)) or "(none)"
                 raise ValueError(
-                    f"Unknown override key '{name}' for plugin '{self.plugin_name}'. "
+                    f"Unknown override key '{name}' for hub '{hub}'. "
                     f"Allowed keys: {allowed}."
+                )
+
+        # Reject excessively large override values.
+        for name, override_val in overrides.items():
+            if override_val is not None and len(override_val) > MAX_OVERRIDE_CREDENTIAL_LENGTH:
+                raise ValueError(
+                    f"override_credentials['{name}'] exceeds the maximum allowed "
+                    f"length of {MAX_OVERRIDE_CREDENTIAL_LENGTH} characters"
                 )
 
         # Groups that the request is overriding (any member supplied).
@@ -102,7 +113,7 @@ class ModelDownloadPlugin(ABC):
         }
 
         resolved: Dict[str, Any] = {}
-        for key in self.config_keys():
+        for key in keys:
             if key.name in overrides and overrides[key.name] is not None:
                 resolved[key.name] = overrides[key.name]
             elif key.group and key.group in touched_groups:
@@ -221,7 +232,11 @@ class ModelDownloadPlugin(ABC):
         return {
             "name": "credentials",
             "ok": True,
-            "message": "No credentials required for this plugin",
+            "message": (
+                f"Credential validation is not applicable for hub "
+                f"'{self.plugin_name}'; it has no credentials to validate. "
+                "Only huggingface, geti, and openvino support this check."
+            ),
         }
 
     def hub_config_keys(self, hub: str) -> List[PluginConfigKey]:
