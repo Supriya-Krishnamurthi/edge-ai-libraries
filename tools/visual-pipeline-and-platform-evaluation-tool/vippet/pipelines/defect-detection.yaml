@@ -6,7 +6,6 @@ definition: >
 tags:
   - Manufacturing
 thumbnail: images/defect-detection.png
-type: vision
 variants:
   - name: CPU
     pipeline_description: >-

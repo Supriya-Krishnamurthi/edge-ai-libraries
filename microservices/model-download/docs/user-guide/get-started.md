@@ -10,7 +10,7 @@ The Model Download is a microservice that downloads models from multiple hubs as
 - Lists available models from supported hubs before download
 - Converts Hugging Face models to OpenVINO model server format
 - Supports multiple model precisions (INT4, INT8, FP16, and FP32)
-- Supports various device targets (CPU, GPU, and NPU), including heterogeneous execution via `HETERO:<dev>[,<dev>...]` (e.g. `HETERO:GPU,CPU`)
+- Supports various device targets (CPU, GPU, and NPU)
 - OpenVINO plugin supports NPU model conversion exclusively in INT4 precision.
 - Models supported for health AI suites(AI-ECG, rPPG and 3D Pose) with HLS plugin.
 - Supports parallel download
@@ -640,11 +640,6 @@ curl -X POST "http://<host-ip>:8200/api/v1/jobs/<job_id>/cancel"
 
 Use this endpoint when user (or another client app) needs to upload a local model directly to model-download.
 The ZIP must contain at least one `.xml` and one `.bin` file.
-
-**Naming rules:**
-
-- `model_name` allows letters, numbers, periods, underscores, hyphens, and spaces. Spaces are converted to underscores. Names must not start or end with a period or contain consecutive periods (`..`).
-- `provider`, `framework`, and `precision` allow only letters, numbers, underscores, and hyphens, and must start with a letter or digit.
 
 ```bash
 curl -X POST "http://<host-ip>:8200/api/v1/models/upload" \

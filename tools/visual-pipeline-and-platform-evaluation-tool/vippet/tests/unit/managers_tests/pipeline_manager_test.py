@@ -11,7 +11,6 @@ from internal_types import (
     InternalPipelineDefinition,
     InternalPipelinePerformanceSpec,
     InternalPipelineSource,
-    InternalPipelineType,
     InternalVariantCreate,
 )
 from managers.pipeline_manager import PipelineManager, METADATA_DIR
@@ -156,7 +155,6 @@ def create_pipeline_definition(
         name=name,
         description=description,
         source=InternalPipelineSource.USER_CREATED,
-        type=InternalPipelineType.VISION,
         tags=tags,
         variants=variants,
     )

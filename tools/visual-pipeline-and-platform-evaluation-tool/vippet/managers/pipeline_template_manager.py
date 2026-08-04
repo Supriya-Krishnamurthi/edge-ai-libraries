@@ -8,7 +8,6 @@ from graph import Graph
 from internal_types import (
     InternalPipeline,
     InternalPipelineSource,
-    InternalPipelineType,
     InternalVariant,
 )
 from pipelines.loader import PipelineLoader
@@ -165,18 +164,6 @@ class PipelineTemplateManager:
         if not isinstance(tags, list):
             tags = []
 
-        # Read type from config, default to vision
-        template_type_str = config.get("type", InternalPipelineType.VISION.value)
-        try:
-            template_type = InternalPipelineType(template_type_str)
-        except ValueError:
-            logger.warning(
-                "Unknown template type '%s' in template '%s', defaulting to 'vision'",
-                template_type_str,
-                name,
-            )
-            template_type = InternalPipelineType.VISION
-
         current_time = get_current_timestamp()
         existing_variant_ids: list[str] = []
         variants: list[InternalVariant] = []
@@ -219,7 +206,6 @@ class PipelineTemplateManager:
             name=name,
             description=description,
             source=InternalPipelineSource.TEMPLATE,
-            type=template_type,
             tags=tags,
             variants=variants,
             thumbnail=None,

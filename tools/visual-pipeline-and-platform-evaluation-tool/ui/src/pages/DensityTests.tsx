@@ -37,13 +37,8 @@ import {
   handleAsyncJobError,
   isAsyncJobError,
 } from "@/lib/apiUtils.ts";
-import {
-  cn,
-  CONTENT_CONTAINER_CLASS,
-  formatErrorMessage,
-} from "@/lib/utils.ts";
+import { cn, formatErrorMessage } from "@/lib/utils.ts";
 import { useStreamRateChange } from "@/hooks/useStreamRateChange.ts";
-import { NavigationGuard } from "@/components/shared/NavigationGuard";
 
 interface PipelineSelection {
   pipelineId: string;
@@ -84,7 +79,6 @@ export const DensityTests = () => {
   const {
     execute: runTest,
     isLoading: isRunning,
-    isPolling: isPollingJob,
     jobId,
     jobStatus,
   } = useAsyncJob({
@@ -271,12 +265,7 @@ export const DensityTests = () => {
   }
 
   return (
-    <div className={CONTENT_CONTAINER_CLASS}>
-      <NavigationGuard
-        when={isPollingJob}
-        title="Density test in progress"
-        description="This page is still polling the active density test. Stop the test or wait for it to finish before leaving this page."
-      />
+    <div className="container pl-16 mx-auto py-10">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Density Tests</h1>
         <p className="text-muted-foreground mt-2">

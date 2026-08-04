@@ -8,11 +8,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table.tsx";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
+import { ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { BackButton } from "@/components/shared/BackButton";
 import { formatBytes } from "@/lib/fileUtils.ts";
-import { CONTENT_CONTAINER_CLASS } from "@/lib/utils";
 
 export function ImagesInSet() {
   const { imageSetName } = useParams<{ imageSetName: string }>();
@@ -24,7 +23,7 @@ export function ImagesInSet() {
 
   if (isLoading) {
     return (
-      <div className={CONTENT_CONTAINER_CLASS}>
+      <div className="container pl-16 mx-auto py-10">
         <div className="mb-6">
           <div className="flex items-center gap-4 mb-2">
             <Skeleton className="h-10 w-10" />
@@ -33,7 +32,7 @@ export function ImagesInSet() {
           <Skeleton className="h-4 w-64 ml-14" />
         </div>
 
-        <Table className="mb-10">
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[30%]">File name</TableHead>
@@ -80,14 +79,15 @@ export function ImagesInSet() {
   }
 
   return (
-    <div className={CONTENT_CONTAINER_CLASS}>
+    <div className="container pl-16 mx-auto py-10">
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-2">
-          <BackButton
+          <Link
             to="/images"
-            className="p-2 rounded"
-            iconClassName="w-5 h-5"
-          />
+            className="p-2 hover:bg-accent rounded transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
 
           <h1 className="text-3xl font-bold">{imageSetName}</h1>
         </div>
@@ -97,7 +97,7 @@ export function ImagesInSet() {
       </div>
 
       {isSuccess && images && images.length > 0 ? (
-        <Table className="mb-10">
+        <Table>
           <TableCaption>
             A list of {images.length} image{images.length !== 1 ? "s" : ""} in
             this set.

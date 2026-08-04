@@ -21,7 +21,6 @@ Choose a quickstart scenario below to match your workload and hardware goals:
 ./quickstart-guide/vision-use-case
 ./quickstart-guide/genai-use-case
 ./quickstart-guide/motion-detection-use-case
-./quickstart-guide/deploy-time-series-analytics-microservice.md
 
 :::
 hide_directive-->

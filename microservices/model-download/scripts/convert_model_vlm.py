@@ -5,7 +5,6 @@ import argparse
 import gc
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Any
 
@@ -103,15 +102,9 @@ class ModelConverter:
     def _validate_device(device: str) -> str:
         """Validate device setting"""
         device = device.lower()
-        if device in ModelConverter.SUPPORTED_DEVICES:
-            return device
-        # HETERO mode: fallback list of base devices, e.g. hetero:gpu,cpu
-        if re.match(r"^hetero:(cpu|gpu|npu)(\.\d+)?(,(cpu|gpu|npu)(\.\d+)?)*$", device):
-            return device
-        raise ValueError(
-            f"Unsupported device: {device}. "
-            f"Supported: {ModelConverter.SUPPORTED_DEVICES} or hetero:<dev>[,<dev>...]"
-        )
+        if device not in ModelConverter.SUPPORTED_DEVICES:
+            raise ValueError(f"Unsupported device: {device}. Supported: {ModelConverter.SUPPORTED_DEVICES}")
+        return device
     
     @staticmethod
     def cleanup_torchscript_cache():
@@ -524,8 +517,8 @@ def parse_arguments() -> argparse.Namespace:
         "--device",
         type=str,
         default="cpu",
-        help=f"Target device: {', '.join(ModelConverter.SUPPORTED_DEVICES)} "
-             f"or hetero:<dev>[,<dev>...] (default: cpu)"
+        choices=ModelConverter.SUPPORTED_DEVICES,
+        help=f"Target device: {', '.join(ModelConverter.SUPPORTED_DEVICES)} (default: cpu)"
     )
     
     parser.add_argument(

@@ -12,7 +12,6 @@ import { useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { useBackgroundJobs } from "@/contexts/useBackgroundJobs";
 import { ModelsTable } from "@/features/models/ModelsTable.tsx";
-import { CONTENT_CONTAINER_CLASS } from "@/lib/utils";
 
 const REQUIRED_MODEL_FILES = ["model.bin", "model.xml"];
 const ALLOWED_CATEGORIES = ["classification", "detection", "genai"] as const;
@@ -98,7 +97,7 @@ export const Models = () => {
 
   if (models.length > 0) {
     return (
-      <div className={CONTENT_CONTAINER_CLASS}>
+      <div className="container pl-16 mx-auto py-10">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Models</h1>
           <p className="text-muted-foreground mt-2">

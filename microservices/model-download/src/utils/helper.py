@@ -10,56 +10,27 @@ from fastapi import HTTPException
 from .logging import logger
 
 
-def sanitize_path_part(value: str, field_name: str, strict: bool = False) -> str:
-    """Validate and sanitize a user-supplied value that will be used as a
-    directory name.
+def sanitize_path_part(value: str, field_name: str) -> str:
+    lowered = value.lower()
 
-    strict=False (default): For model name field. Allows letters, numbers, periods,
-    underscores, hyphens, and spaces. Spaces are normalized to underscores.
-
-    strict=True: For technical identifiers (provider, framework, precision).
-    Allows only letters, numbers, underscores, and hyphens, and must start
-    with a letter or digit.
-    """
-    stripped = value.strip()
-
-    if not stripped:
+    # Reject if contains invalid characters
+    if not re.match(r"^[a-z0-9_\-\s]+$", lowered):
         raise HTTPException(
             status_code=400,
-            detail=f"{field_name} must not be empty.",
+            detail=f"{field_name} contains invalid characters. Only alphanumeric, spaces, underscores, and hyphens allowed.",
         )
 
-    if strict:
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", stripped):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"{field_name} may contain only letters, numbers, "
-                    "underscores, and hyphens, and must start with a letter or digit."
-                ),
-            )
-        return stripped
+    # Sanitize: strip and replace spaces with underscores
+    sanitized_value = lowered.strip()
+    sanitized_value = sanitized_value.replace(" ", "_")
 
-    if not re.fullmatch(r"[A-Za-z0-9._ -]+", stripped):
+    if not sanitized_value:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"{field_name} may contain only letters, numbers, periods, "
-                "underscores, hyphens, and spaces."
-            ),
+            detail=f"{field_name} is empty or invalid.",
         )
 
-    if (stripped.startswith(".") or stripped.endswith(".") or ".." in stripped):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"{field_name} must not start or end with a period "
-                "or contain consecutive periods."
-            ),
-        )
-
-    # Normalize spaces for filesystem-friendly directory names.
-    return stripped.replace(" ", "_")
+    return sanitized_value
 
 
 def validate_zip_file(content: bytes) -> None:

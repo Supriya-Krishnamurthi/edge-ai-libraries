@@ -21,7 +21,7 @@ from common.video import (
 from common.metrics import (
     get_live_caption_metrics,
     save_live_video_caption_telemetry_kpis,
-    save_lvc_metrics_to_wsf_format
+    save_metrics_to_wsf_format,
 )
 
 
@@ -98,9 +98,7 @@ class LiveCaptionHwSize(HttpUser):
                     LiveCaptionHwSize.run_configs[run_id] = {
                         "rtspUrl": payload_dict.get("rtspUrl"),
                         "modelName": payload_dict.get("modelName"),
-                        "pipelineName": payload_dict.get("pipelineName"),
-                        "frameRate": payload_dict.get("frameRate"),
-                        "chunkSize": payload_dict.get("chunkSize")
+                        "pipelineName": payload_dict.get("pipelineName")
                     }
                     print(f"Started live caption pipeline with runId: {run_id}")
                     print(f"Make sure Model: {payload_dict.get('modelName')} is downloaded. If not, download the model and update the payload with correct model name before running the test")
@@ -123,7 +121,7 @@ def collect_metrics(environment, **kwargs):
         stop_all_run_request(LiveCaptionHwSize.run_url, LiveCaptionHwSize.run_ids)
         all_metrics = get_live_caption_metrics(LiveCaptionHwSize.metrics)
         output_file = save_live_video_caption_telemetry_kpis(LiveCaptionHwSize.report_dir, all_metrics, LiveCaptionHwSize.run_configs)
-        save_lvc_metrics_to_wsf_format(LiveCaptionHwSize.report_dir, output_file, LiveCaptionHwSize.caption_duration)
+        save_metrics_to_wsf_format(LiveCaptionHwSize.report_dir, output_file, LiveCaptionHwSize.caption_duration)
 
     
     
