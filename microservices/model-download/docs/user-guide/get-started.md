@@ -17,6 +17,9 @@ The Model Download is a microservice that downloads models from multiple hubs as
 - Supports configurable model caching
 - Optionally schedules configured model downloads when the service starts
 - Supports custom model upload through `POST /models/upload`
+- Supports per-request credential overrides via `override_credentials`
+- Supports pre-download credential validation via `validate_credentials`
+- Supports job cancellation for queued, downloading, or converting jobs
 - Exposes a REST API with OpenAPI documentation
 
 ## Prerequisites
@@ -730,7 +733,7 @@ When a download completes, the `result.download_path` field in the job response 
 All hubs follow a common base pattern:
 
 ```text
-<download_path>/<hub>/<model_name>/[<precision>/]
+<download_path>/<hub>/<model_name>/[<hub_specific_folder>/]
 ```
 
 Where `<download_path>` is the `download_path` query parameter passed to `POST /api/v1/models/download`, resolved relative to the configured model storage root.
@@ -738,7 +741,7 @@ Where `<download_path>` is the `download_path` query parameter passed to `POST /
 Hubs that support multiple precisions append a `<precision>/` subdirectory. Hubs that do not support precision store files directly under `<model_name>/`:
 
 | Hub | Path layout | Example |
-|-----|------------|---------||
+|-----|------------|---------|
 | `huggingface` | `<download_path>/<hub>/<model_name>` | `models/huggingface/microsoft_Phi-3.5-mini-instruct` |
 | `ollama` | `<download_path>/<hub>/<model_name>` | `models/ollama/tinyllama` |
 | `ultralytics` | `<download_path>/<hub>/<model_name>/<precision>/` | `models/ultralytics/yolov8s/FP16/` |
