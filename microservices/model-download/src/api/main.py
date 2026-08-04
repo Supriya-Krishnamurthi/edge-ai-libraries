@@ -474,6 +474,7 @@ async def list_plugins():
             if len(plugin_supported_hubs) > 1:
                 hub_description = getattr(plugin, "hub_description", None)
                 hub_capabilities = getattr(plugin, "hub_capabilities", None)
+
                 for hub in plugin_supported_hubs:
                     is_available, _ = plugin_registry.hub_is_available(hub)
                     if not is_available:
@@ -486,6 +487,7 @@ async def list_plugins():
                     hub_caps = {"supports_parallel_downloads": can_handle_parallel}
                     if callable(hub_capabilities):
                         hub_caps.update(hub_capabilities(hub))
+
 
                     plugins_info[plugin_type].append({
                         "name": hub,
@@ -587,12 +589,12 @@ async def upload_model(
     sanitized_model_name = sanitize_path_part(model_name, "model_name")
     path_parts = [
         upload_base_dir,
-        sanitize_path_part(provider, "provider"),
-        sanitize_path_part(framework, "framework"),
+        sanitize_path_part(provider, "provider", strict=True),
+        sanitize_path_part(framework, "framework", strict=True),
         sanitized_model_name,
     ]
     if precision:
-        path_parts.append(sanitize_path_part(precision, "precision"))
+        path_parts.append(sanitize_path_part(precision, "precision", strict=True))
     target_dir = os.path.abspath(os.path.join(*path_parts))
 
     if os.path.commonpath([upload_base_dir, target_dir]) != upload_base_dir:

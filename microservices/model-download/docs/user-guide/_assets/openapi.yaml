@@ -76,11 +76,10 @@ components:
 
     DeviceType:
       type: string
-      enum:
-        - CPU
-        - GPU
-        - NPU
-      description: The target device type for model deployment
+      pattern: '^(CPU|GPU|NPU|HETERO:(CPU|GPU|NPU)(\.\d+)?(,(CPU|GPU|NPU)(\.\d+)?)*)$'
+      description: >-
+        The target device for model deployment: CPU, GPU, NPU, or HETERO with a
+        fallback list of devices (e.g. HETERO:GPU,CPU)
 
     Config:
       type: object
@@ -1008,7 +1007,7 @@ paths:
         `/opt/models/custom_uploaded_models/{provider}/{framework}/{model_name}/[{precision}/]`
 
         **Validation and behavior:**
-        - `model_name` is required and sanitized to lowercase with safe characters
+        - `model_name` is required. Allowed: `A-Z a-z 0-9 . _ - <space>`. Spaces gets replaced with underscores. Must not start/end with `.` or contain `..`
         - File size limit is enforced (default 500MB via `MAX_UPLOAD_SIZE_MB`)
         - Files are read in chunks (default 8KB via `UPLOAD_CHUNK_SIZE_KB`) to prevent memory exhaustion with large uploads
         - If target model path already exists, the API returns `409`

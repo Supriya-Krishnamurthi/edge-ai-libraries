@@ -93,7 +93,6 @@ class ExternalSourcesPlugin(ModelDownloadPlugin):
 
     def hub_config_keys(self, hub: str) -> List[PluginConfigKey]:
         """Return config keys applicable to a specific hub.
-
         Each hub has its own private method so keys can evolve independently.
         """
         normalized = (hub or "").lower().replace("_", "-")
@@ -122,7 +121,6 @@ class ExternalSourcesPlugin(ModelDownloadPlugin):
     def _omz_config_keys() -> List[PluginConfigKey]:
         # No keys today; add OMZ-specific keys here when needed.
         return []
-
     @staticmethod
     def _pipeline_zoo_config_keys() -> List[PluginConfigKey]:
         # No keys today; add OMZ-specific keys here when needed.
