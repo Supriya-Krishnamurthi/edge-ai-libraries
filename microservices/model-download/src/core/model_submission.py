@@ -85,17 +85,18 @@ async def submit_models(
 ) -> list[str]:
     """Validate, register, and asynchronously schedule model jobs."""
 
-    supported_hubs = set(plugin_registry.supported_hubs())
-    for plugin_type in plugin_registry.plugins:
-        supported_hubs.update(
-            name.lower() for name in plugin_registry.get_plugin_names(plugin_type)
-        )
+    valid_hubs = {hub.value for hub in ModelHub}
     for model in request.models:
         logger.info(f"Requested Model Hub: {model.hub}")
-        if model.hub.lower() not in supported_hubs:
+        if model.hub.lower() not in valid_hubs:
             raise ModelSubmissionError(
                 "Unsupported model download/conversion detected. "
-                f"Supported methods are {supported_hubs}."
+                f"Supported valid hubs are {valid_hubs}."
+            )
+        is_available, reason = plugin_registry.hub_is_available(model.hub.lower())
+        if not is_available:
+            raise ModelSubmissionError(
+                f"Plugin '{model.hub}' is not available: {reason}"
             )
 
     hf_token = os.getenv("HF_TOKEN")
@@ -104,11 +105,6 @@ async def submit_models(
 
     for model in request.models:
         hub_name = model.hub.value
-        is_plugin_available, error_reason = plugin_registry.hub_is_available(hub_name)
-        if not is_plugin_available:
-            raise ModelSubmissionError(
-                f"Plugin '{model.hub}' is not available: {error_reason}"
-            )
 
         extra_kwargs = model.model_dump().copy()
         request_credentials = extra_kwargs.get("override_credentials") or {}
