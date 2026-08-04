@@ -3,7 +3,6 @@
 
 import asyncio
 import os
-import re
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
@@ -86,17 +85,18 @@ async def submit_models(
 ) -> list[str]:
     """Validate, register, and asynchronously schedule model jobs."""
 
-    supported_hubs = set(plugin_registry.supported_hubs())
-    for plugin_type in plugin_registry.plugins:
-        supported_hubs.update(
-            name.lower() for name in plugin_registry.get_plugin_names(plugin_type)
-        )
+    valid_hubs = {hub.value for hub in ModelHub}
     for model in request.models:
         logger.info(f"Requested Model Hub: {model.hub}")
-        if model.hub.lower() not in supported_hubs:
+        if model.hub.lower() not in valid_hubs:
             raise ModelSubmissionError(
                 "Unsupported model download/conversion detected. "
-                f"Supported methods are {supported_hubs}."
+                f"Supported valid hubs are {valid_hubs}."
+            )
+        is_available, reason = plugin_registry.hub_is_available(model.hub.lower())
+        if not is_available:
+            raise ModelSubmissionError(
+                f"Plugin '{model.hub}' is not available: {reason}"
             )
 
     hf_token = os.getenv("HF_TOKEN")
@@ -105,11 +105,6 @@ async def submit_models(
 
     for model in request.models:
         hub_name = model.hub.value
-        is_plugin_available, error_reason = plugin_registry.hub_is_available(hub_name)
-        if not is_plugin_available:
-            raise ModelSubmissionError(
-                f"Plugin '{model.hub}' is not available: {error_reason}"
-            )
 
         extra_kwargs = model.model_dump().copy()
         request_credentials = extra_kwargs.get("override_credentials") or {}
@@ -122,11 +117,28 @@ async def submit_models(
             )
         if model.is_ovms and plugin is None:
             plugin = plugin_registry.get_plugin("converter", "openvino")
-        if request_credentials and plugin is not None:
-            try:
-                plugin.resolve_config(request_credentials, hub=hub_name)
-            except ValueError as error:
-                raise ModelSubmissionError(str(error)) from error
+        if plugin is not None:
+            # Validate override keys are recognised by the plugin.
+            if request_credentials:
+                try:
+                    plugin.resolve_config(request_credentials, hub=hub_name)
+                except ValueError as error:
+                    raise ModelSubmissionError(str(error)) from error
+
+            # Opt-in credential pre-check: fail fast before creating a job.
+            if extra_kwargs.get("validate_credentials"):
+                resolved = plugin.resolve_config(request_credentials, hub=hub_name)
+                validation = plugin.validate_credentials(resolved)
+                if not validation.get("ok"):
+                    raise ModelSubmissionError(
+                        f"Credential validation failed [{validation['name']}]: "
+                        f"{validation['message']}"
+                    )
+                logger.info(
+                    "credential_validation_result",
+                    plugin=plugin.plugin_name,
+                    message=validation.get("message"),
+                )
 
         logger.info(
             "model_submission_started",
@@ -157,7 +169,7 @@ async def submit_models(
                     "Unable to prepare the requested destination under MODELS_DIR."
                 ) from error
             job_ids.append(download_job_id)
-            schedule_background_task(
+            task = schedule_background_task(
                 model_manager.process_download(
                     job_id=download_job_id,
                     model_name=model.name,
@@ -169,6 +181,7 @@ async def submit_models(
                 background_tasks,
                 name=f"model-download-{download_job_id}",
             )
+            model_manager.register_asyncio_task(download_job_id, task)
 
         if needs_conversion:
             is_openvino_available, openvino_error = plugin_registry.hub_is_available("openvino")
@@ -192,16 +205,11 @@ async def submit_models(
                 )
                 config["precision"] = "int4"
 
-            # Create a unique output directory for the converted model.
-            # HETERO devices contain ':' and ',' which are hostile in paths,
-            # so the device is slugified for the directory (HETERO:GPU,CPU ->
-            # hetero_gpu_cpu) while the raw value is still passed to conversion.
-            device_slug = re.sub(r"[^A-Za-z0-9._-]+", "_", config["device"])
             convert_output_dir = _resolve_destination(
                 models_dir,
                 download_path,
                 "openvino_models",
-                device_slug.lower(),
+                config["device"].lower(),
                 config["precision"].lower(),
             )
 
@@ -219,7 +227,7 @@ async def submit_models(
                     "Unable to prepare the requested destination under MODELS_DIR."
                 ) from error
             job_ids.append(convert_job_id)
-            schedule_background_task(
+            task = schedule_background_task(
                 model_manager.process_conversion(
                     job_id=convert_job_id,
                     model_path=model_download_path,
@@ -235,5 +243,6 @@ async def submit_models(
                 background_tasks,
                 name=f"model-conversion-{convert_job_id}",
             )
+            model_manager.register_asyncio_task(convert_job_id, task)
 
     return job_ids

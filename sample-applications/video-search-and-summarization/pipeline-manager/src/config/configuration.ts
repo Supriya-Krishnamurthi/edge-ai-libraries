@@ -41,10 +41,9 @@ export default () => ({
     publishPort: process.env.EVAM_PUBLISH_PORT,
     videoTopic: 'topic/video_stream',
     datetimeFormat: 'yyyy_MM_dd-HH_mm_ss.S',
-    model: process.env.EVAM_DETECTION_MODEL ?? 'yolov8l',
+    model: 'yolov8l-worldv2',
     modelPath:
-      process.env.EVAM_DETECTION_MODEL_PATH ??
-      '/home/pipeline-server/models/object-detection/ultralytics/public/yolov8l/FP32/yolov8l.xml',
+      '/home/pipeline-server/models/yoloworld/v2/FP32/yolov8l-worldv2.xml',
     device: process.env.EVAM_DEVICE ?? 'CPU',
     rmq: {
       queue: 'my_mqtt_queue',

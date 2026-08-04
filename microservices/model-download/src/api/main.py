@@ -365,6 +365,56 @@ async def get_job_status(job_id: str):
     return model_manager._jobs[job_id]
 
 
+@app.post("/jobs/{job_id}/cancel", tags=["Jobs"])
+async def cancel_job(job_id: str):
+    """
+    Cancel a running or queued job.
+
+    If the job is in a cancellable state (queued, downloading, converting),
+    it is cancelled and any active executor is shut down.
+    Returns 404 if the job does not exist and 409 if the job is already
+    in a terminal state (completed, failed, canceled).
+    """
+    if job_id not in model_manager._jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    job = model_manager._jobs[job_id]
+    if job["status"] in ("completed", "failed", "canceled"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job {job_id} is already in terminal state '{job['status']}' and cannot be cancelled",
+        )
+
+    cancelled = model_manager.cancel_job(job_id)
+    if not cancelled:
+        raise HTTPException(status_code=409, detail=f"Job {job_id} could not be cancelled")
+
+    # Some hubs (huggingface, geti) use in-process API calls that cannot be
+    # interrupted mid-transfer. For these, cancellation is best-effort: the job
+    # is marked canceled but the underlying network transfer may continue briefly
+    # until it completes or times out and partial files are cleaned up
+    hub = job.get("hub", "").lower()
+    best_effort_hubs = {"huggingface", "geti", "openvino"}
+    warning = None
+    if hub in best_effort_hubs:
+        warning = (
+            f"Hub '{hub}' does not support immediate interruption. "
+            "The transfer may continue briefly; partial files are cleaned "
+            "up automatically."
+        )
+        logger.warning("cancel_best_effort", job_id=job_id, hub=hub)
+
+    response = {
+        "message": f"Job {job_id} has been cancelled",
+        "job_id": job_id,
+        "status": "canceled",
+    }
+    if warning:
+        response["warning"] = warning
+
+    return response
+
+
 @app.get("/models/results", tags=["Models"])
 async def get_model_results():
     """
@@ -424,7 +474,6 @@ async def list_plugins():
             if len(plugin_supported_hubs) > 1:
                 hub_description = getattr(plugin, "hub_description", None)
                 hub_capabilities = getattr(plugin, "hub_capabilities", None)
-
                 for hub in plugin_supported_hubs:
                     is_available, _ = plugin_registry.hub_is_available(hub)
                     if not is_available:
@@ -438,13 +487,12 @@ async def list_plugins():
                     if callable(hub_capabilities):
                         hub_caps.update(hub_capabilities(hub))
 
-
                     plugins_info[plugin_type].append({
                         "name": hub,
                         "type": plugin_type,
                         "description": hub_desc or "No description available",
                         "capabilities": hub_caps,
-                        "config_keys": get_hub_config_keys(plugin, hub),
+                        "hub_config_keys": get_hub_config_keys(plugin, hub),
                         "available": True,
                         "unavailable_reason": None,
                     })
@@ -465,7 +513,7 @@ async def list_plugins():
                 "type": plugin_type,
                 "description": description,
                 "capabilities": capabilities,
-                "config_keys": get_hub_config_keys(plugin, plugin_name),
+                "hub_config_keys": get_hub_config_keys(plugin, plugin_name),
                 "available": is_available,
                 "unavailable_reason": reason if not is_available else None
             }
@@ -539,12 +587,12 @@ async def upload_model(
     sanitized_model_name = sanitize_path_part(model_name, "model_name")
     path_parts = [
         upload_base_dir,
-        sanitize_path_part(provider, "provider", strict=True),
-        sanitize_path_part(framework, "framework", strict=True),
+        sanitize_path_part(provider, "provider"),
+        sanitize_path_part(framework, "framework"),
         sanitized_model_name,
     ]
     if precision:
-        path_parts.append(sanitize_path_part(precision, "precision", strict=True))
+        path_parts.append(sanitize_path_part(precision, "precision"))
     target_dir = os.path.abspath(os.path.join(*path_parts))
 
     if os.path.commonpath([upload_base_dir, target_dir]) != upload_base_dir:

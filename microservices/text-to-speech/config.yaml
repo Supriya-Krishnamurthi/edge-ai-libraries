@@ -12,7 +12,7 @@ models:
     # Inference device. Permitted values: CPU | GPU
     #   SpeechT5: CPU or GPU
     #   Qwen:     CPU or GPU
-    device: CPU
+    device: GPU
     # Model precision. Permitted values: int8 | int4 | fp16 | fp32
     #   SpeechT5: int8, int4, fp16, or fp32
     #   Qwen:     int8, int4, fp16, or fp32
@@ -23,8 +23,7 @@ models:
     #   Qwen:     custom_voice | voice_design
     model_variant: custom_voice
     # Default speaker/voice. Permitted values:
-    #   SpeechT5: Ryan | Miles | Aaron | Nora | Elena | Kabir | Angus
-    #             (CMU Arctic ids bdl/jmk/rms/clb/slt/ksp/awb are accepted as aliases)
+    #   SpeechT5: default
     #   Qwen custom_voice example: Ryan
     #   Qwen voice_design: speaker can be omitted
     default_speaker: Ryan

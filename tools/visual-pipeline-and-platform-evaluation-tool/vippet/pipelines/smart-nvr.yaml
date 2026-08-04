@@ -5,7 +5,6 @@ definition: >
 tags:
   - Smart Cities
 thumbnail: images/smart-nvr.png
-type: vision
 variants:
   - name: CPU
     pipeline_description: >-

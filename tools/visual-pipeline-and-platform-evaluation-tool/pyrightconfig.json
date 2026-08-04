@@ -19,10 +19,6 @@
   ],
   "executionEnvironments": [
     {
-      "root": "vippet/tests/performance",
-      "extraPaths": ["vippet/tests/functional"]
-    },
-    {
       "root": "vippet"
     },
     {

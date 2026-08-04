@@ -4,21 +4,16 @@ import { PipelineToolbarButton } from "./shared";
 type RunPipelineButtonProps = {
   onRun: () => void;
   isRunning?: boolean;
-  disabled?: boolean;
 };
 
-const RunPipelineButton = ({
-  onRun,
-  isRunning,
-  disabled,
-}: RunPipelineButtonProps) => (
+const RunPipelineButton = ({ onRun, isRunning }: RunPipelineButtonProps) => (
   <PipelineToolbarButton
     onClick={onRun}
-    disabled={isRunning || disabled}
+    disabled={isRunning}
     title="Run Performance Test"
     icon={<Play className="w-5 h-5" />}
     label={<span>Run pipeline</span>}
-    variant="default"
+    variant="primary"
     widthClassName="w-[10rem]"
   />
 );

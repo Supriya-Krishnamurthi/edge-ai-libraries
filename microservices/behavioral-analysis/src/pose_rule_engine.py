@@ -204,14 +204,10 @@ class PoseRuleEngine:
         pose_cfg = pattern_cfg.get("pose", {})
         phases = pose_cfg.get("phases", [])
 
-        logger.debug(f"evaluate: {len(poses)} poses, {len(phases)} phases, min_frames={min_frames}")
-
         if not phases:
-            logger.debug("No phases defined in pattern")
             return EngineResult(matched=False, confidence=0.0, description="No phases defined")
 
         if len(poses) < min_frames:
-            logger.debug(f"Insufficient frames: {len(poses)} < {min_frames}")
             return EngineResult(
                 matched=False, confidence=0.0,
                 description=f"Not enough frames: {len(poses)}/{min_frames}",
@@ -219,24 +215,20 @@ class PoseRuleEngine:
 
         per_side = pose_cfg.get("per_side", False)
         window_size = pose_cfg.get("window_size", None)
-        logger.debug(f"evaluate: per_side={per_side}, window_size={window_size}")
 
         if per_side:
             # Try left side, then right side — return first match
             for side in ("left", "right"):
-                logger.debug(f"Trying side: {side}")
-                result = self._evaluate_with_side(poses, phases, window_size, side, min_frames)
-                logger.debug(f"Side {side} result: matched={result.matched}, confidence={result.confidence:.3f}")
+                result = self._evaluate_with_side(poses, phases, window_size, side)
                 if result.matched:
                     result.description = f"[{side}] {result.description}"
                     return result
-            logger.debug("No side matched")
             return EngineResult(
                 matched=False, confidence=0.0,
                 description="Pattern not detected (tried both sides)",
             )
         else:
-            return self._evaluate_with_side(poses, phases, window_size, side=None, min_frames=min_frames)
+            return self._evaluate_with_side(poses, phases, window_size, side=None)
 
     def _evaluate_with_side(
         self,
@@ -244,20 +236,18 @@ class PoseRuleEngine:
         phases: list[dict[str, Any]],
         window_size: Optional[int],
         side: Optional[str],
-        min_frames: int,
     ) -> EngineResult:
         """Evaluate phases with a specific side expansion (or None for no expansion)."""
         if window_size is not None:
-            return self._evaluate_window(poses, phases, window_size, side, min_frames)
+            return self._evaluate_window(poses, phases, window_size, side)
         else:
-            return self._evaluate_sliding_split(poses, phases, side, min_frames)
+            return self._evaluate_sliding_split(poses, phases, side)
 
     def _evaluate_sliding_split(
         self,
         poses: list,
         phases: list[dict[str, Any]],
         side: Optional[str],
-        min_frames: int,
     ) -> EngineResult:
         """
         Sliding split: find the best partition point(s) for ordered phases.
@@ -266,30 +256,22 @@ class PoseRuleEngine:
         n = len(poses)
         num_phases = len(phases)
 
-        logger.debug(f"_evaluate_sliding_split: {n} poses, {num_phases} phases, side={side}")
-
         # Pre-compute per-frame match for each phase
         frame_matches = []
-        for phase_idx, phase in enumerate(phases):
+        for phase in phases:
             matches = self._compute_phase_frame_matches(poses, phase, side)
             frame_matches.append(matches)
-            match_count = sum(matches)
-            logger.debug(f"  Phase {phase_idx} ('{phase.get('name', 'unnamed')}'): {match_count}/{n} frames matched")
 
-        # Get min_frames requirements: respect pattern-level if specified, fall back to global
-        min_frames_per_phase = [p.get("min_frames", min_frames) for p in phases]
-        logger.debug(f"Phase min_frames requirements: {min_frames_per_phase} (global fallback={min_frames})")
+        # Get min_frames requirements
+        min_frames_per_phase = [p.get("min_frames", 1) for p in phases]
 
         # For a single phase, evaluate across entire sequence
         if num_phases == 1:
             count = sum(frame_matches[0])
             required = min_frames_per_phase[0]
-            logger.debug(f"Single phase evaluation: {count}/{required} frames (matched/required)")
-            
             if count >= required:
                 conf = count / n
                 matched_indices = [i for i, m in enumerate(frame_matches[0]) if m]
-                logger.debug(f"✓ Phase matched! confidence={conf:.3f}")
                 return EngineResult(
                     matched=True,
                     confidence=min(1.0, conf),
@@ -300,7 +282,6 @@ class PoseRuleEngine:
                     )],
                     key_frames=matched_indices,
                 )
-            logger.debug(f"✗ Phase failed: {count}/{required} (short by {required-count})")
             return EngineResult(
                 matched=False, confidence=0.0,
                 description=f"Phase '{phases[0].get('name', '0')}': {count}/{required} frames (need {required})",
@@ -444,7 +425,6 @@ class PoseRuleEngine:
         phases: list[dict[str, Any]],
         window_size: int,
         side: Optional[str],
-        min_frames: int,
     ) -> EngineResult:
         """Sliding window: all phases evaluated within a fixed-size window."""
         n = len(poses)
@@ -469,7 +449,7 @@ class PoseRuleEngine:
             window_total = 0
 
             for i, phase in enumerate(phases):
-                required = phase.get("min_frames", min_frames)  # Use global fallback
+                required = phase.get("min_frames", 1)
                 count = sum(frame_matches[i][start:end])
                 if count < required:
                     all_phases_ok = False
@@ -510,22 +490,12 @@ class PoseRuleEngine:
         conditions = phase.get("conditions", [])
         match_mode = phase.get("match", "all")
         results = []
-        
-        phase_name = phase.get("name", "unnamed")
-        logger.debug(f"    Computing frame matches for phase '{phase_name}', match_mode={match_mode}, conditions={len(conditions)}")
 
-        passed_count = 0
         for i, pose in enumerate(poses):
             prev_pose = poses[i - 1] if i > 0 else None
             frame_ok = self._evaluate_frame(pose, prev_pose, conditions, match_mode, side)
             results.append(frame_ok)
-            if frame_ok:
-                passed_count += 1
-            
-            if i < 3 or (i < len(poses) - 1 and i % (max(1, len(poses)//5)) == 0):  # Log first 3 and every ~20%
-                logger.debug(f"      Frame {i}: {'✓' if frame_ok else '✗'}")
 
-        logger.debug(f"    Phase '{phase_name}' frame matches: {passed_count}/{len(poses)} passed")
         return results
 
     def _evaluate_frame(
@@ -541,24 +511,13 @@ class PoseRuleEngine:
             return True
 
         results = []
-        condition_details = []
-        for idx, cond in enumerate(conditions):
+        for cond in conditions:
             result = self._evaluate_condition(pose, prev_pose, cond, side)
             results.append(result)
-            subj = cond.get("subject", "?")
-            rel = cond.get("relation", "?")
-            condition_details.append(f"cond{idx}({subj},{rel})={result}")
 
         if match_mode == "any":
-            final = any(results)
-        else:
-            final = all(results)
-        
-        # Only log when a frame fails (to avoid spam)
-        if not final:
-            logger.debug(f"        Frame condition eval (mode={match_mode}): {' '.join(condition_details)} → {final}")
-        
-        return final
+            return any(results)
+        return all(results)
 
     def _evaluate_condition(
         self,
@@ -651,27 +610,19 @@ class PoseRuleEngine:
         subject = self._resolve_point(pose, subject_name)
         ref = self._resolve_point(pose, self._expand_name(reference_name, side))
         if subject is None or ref is None:
-            logger.debug(f"          Distance eval({subject_name}): subject or ref not resolved")
             return False
 
         torso = _torso_length(pose.keypoints, pose.confidences, self.min_confidence)
         if torso < 1e-4:
-            logger.debug(f"          Distance eval({subject_name}): torso too small")
             return False
 
         dist = _euclidean(subject, ref)
         normalized = dist / torso
 
         if relation == "near":
-            result = normalized < threshold
-            if not result:
-                logger.debug(f"          Distance eval({subject_name}): normalized_dist={normalized:.3f} not < {threshold:.3f}")
-            return result
+            return normalized < threshold
         elif relation == "far":
-            result = normalized >= threshold
-            if not result:
-                logger.debug(f"          Distance eval({subject_name}): normalized_dist={normalized:.3f} not >= {threshold:.3f}")
-            return result
+            return normalized >= threshold
         return False
 
     def _rel_velocity(
@@ -720,7 +671,6 @@ class PoseRuleEngine:
         """
         vertex = self._resolve_point(pose, subject_name)
         if vertex is None:
-            logger.debug(f"          Angle eval({subject_name}): vertex not resolved")
             return False
 
         if not isinstance(reference_spec, list) or len(reference_spec) != 2:
@@ -733,14 +683,10 @@ class PoseRuleEngine:
         point_a = self._resolve_point(pose, point_a_name)
         point_c = self._resolve_point(pose, point_c_name)
         if point_a is None or point_c is None:
-            logger.debug(f"          Angle eval({subject_name}): point_a or point_c not resolved")
             return False
 
         angle = _angle_at_vertex(point_a, vertex, point_c)
-        result = min_angle <= angle <= max_angle
-        if not result:
-            logger.debug(f"          Angle eval({subject_name}): angle={angle:.1f}° not in [{min_angle:.1f}, {max_angle:.1f}]")
-        return result
+        return min_angle <= angle <= max_angle
 
     def _resolve_point(
         self, pose, name: str

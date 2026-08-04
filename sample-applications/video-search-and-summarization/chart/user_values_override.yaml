@@ -102,6 +102,8 @@ ovms:
 videoingestion:
   # odModelName defines the name of Object Detection Model
   odModelName: ""
+  # odModelType defines the type of Object Detection Model. e.g., "yolo_v8"
+  odModelType: ""
 
 vsscollector:
   enabled: false

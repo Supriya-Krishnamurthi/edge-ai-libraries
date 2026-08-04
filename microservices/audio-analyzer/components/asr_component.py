@@ -64,14 +64,9 @@ class ASRComponent(PipelineComponent):
 
         raise ValueError(f"Unsupported ASR provider/model: {normalized_provider}/{normalized_model_name}")
 
-    def __init__(self, session_id, provider="openai", model_name="whisper-small", device="CPU", temperature=0.0, speaker_scope_id=None):
+    def __init__(self, session_id, provider="openai", model_name="whisper-small", device="CPU", temperature=0.0):
 
         self.session_id = session_id
-        # Scope key for speaker enrollment. Stays stable for a whole
-        # conversation, whereas session_id is regenerated for every utterance —
-        # enrolling per utterance would re-derive the reference voice from the
-        # very audio being judged.
-        self.speaker_scope_id = speaker_scope_id or session_id
         self.temperature = temperature
         self.provider = provider
         self.model_name = model_name
@@ -174,30 +169,27 @@ class ASRComponent(PipelineComponent):
 
                     speaker_turns: list[dict] = []
                     label_embeddings: dict = {}
+                    per_segment_labels: list[dict] = []
                     primary_map: dict[str, bool] = {}
-                    source_segments: list[dict] = transcription["segments"]
 
                     if use_per_segment_enrollment:
-                        labelled_segments = self.pyannote_diarizer.split_and_label_segments(
+                        whisper_time_segments = [
+                            {"start": float(s.get("start", 0.0)), "end": float(s.get("end", 0.0))}
+                            for s in transcription["segments"]
+                        ]
+                        per_segment_labels = self.pyannote_diarizer.label_whisper_segments(
                             chunk_path,
-                            transcription["segments"],
-                            session_id=self.speaker_scope_id,
+                            whisper_time_segments,
+                            session_id=self.session_id,
                         )
-                        # Sub-segments rebuilt from word timings bypassed the
-                        # provider's repetition filter — re-apply it.
-                        for seg in labelled_segments:
-                            if seg.get("text_rebuilt"):
-                                seg["text"] = self.asr.clean_text(seg.get("text", ""))
-                        source_segments = labelled_segments
                         logger.info(
-                            "[DIARIZATION] session=%s scope=%s chunk=%s | acoustic split produced %d labelled segment(s): %s",
+                            "[DIARIZATION] session=%s chunk=%s | per-segment enrollment produced %d label(s): %s",
                             self.session_id,
-                            self.speaker_scope_id,
                             os.path.basename(chunk_path),
-                            len(labelled_segments),
+                            len(per_segment_labels),
                             ", ".join(
                                 f"{lbl.get('speaker','?')}[{lbl.get('start',0):.2f}s-{lbl.get('end',0):.2f}s]"
-                                for lbl in labelled_segments
+                                for lbl in per_segment_labels
                             ) or "none",
                         )
                     else:
@@ -226,22 +218,20 @@ class ASRComponent(PipelineComponent):
                         len(transcription["segments"]),
                     )
 
-                    for idx, sent in enumerate(source_segments):
+                    for idx, sent in enumerate(transcription["segments"]):
                         text = sent["text"].strip()
                         if not text:
                             continue
 
-                        if use_per_segment_enrollment:
-                            speaker = sent.get("speaker")
+                        if use_per_segment_enrollment and idx < len(per_segment_labels):
+                            speaker = per_segment_labels[idx].get("speaker")
                             # In the enrollment model SPEAKER_00 is always the enrolled primary
                             is_primary = (speaker == "SPEAKER_00")
-                            logger.info(
-                                "[DIARIZATION] segment [%.2fs-%.2fs] acoustic-split -> speaker=%s is_primary=%s (%s) | text=%r",
+                            logger.debug(
+                                "[DIARIZATION] segment [%.2fs-%.2fs] per-segment-> speaker=%s is_primary=%s",
                                 sent["start"], sent["end"],
                                 speaker if speaker else "UNKNOWN",
                                 is_primary,
-                                "PRIMARY - picked" if is_primary else "SECONDARY - will be dropped downstream",
-                                text[:80],
                             )
                         else:
                             # Assign the speaker turn with the greatest time overlap
