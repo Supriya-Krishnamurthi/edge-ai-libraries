@@ -51,10 +51,8 @@ export HUGGINGFACEHUB_API_TOKEN=<your-huggingface-token>
 To use the Geti™ plugin, set these variables:
 
 ```bash
-export GETI_WORKSPACE_ID=<YOUR_GETI_WORKSPACE_ID>
 export GETI_HOST=<GETI_HOST_ADDRESS>
 export GETI_TOKEN=<GETI_ACCESS_TOKEN>
-export GETI_SERVER_API_VERSION=v1
 export GETI_SERVER_SSL_VERIFY=False  # Default is FALSE
 ```
 
@@ -169,7 +167,7 @@ curl -X POST "http://<host-ip>:8200/api/v1/models/list" \
   }'
 ```
 
-For Geti™ software, listing discovers the latest model of every model group across the projects in the configured workspace. Each item's `model_type` is the Geti task type (for example, `DETECTION` or `CLASSIFICATION`) resolved from the model group's task, and `metadata` includes `project_id`, `project_name`, `model_group_id`, `model_group_name`, `model_id`, and `optimized_model_ids`. Requires `GETI_HOST`, `GETI_TOKEN`, and `GETI_WORKSPACE_ID` to be set.
+For Geti™ software, listing discovers models across all projects through the Geti 3.0 Model API. Each item's `metadata` includes `project_id`, `project_name`, `model_id`, `variant_ids`, and `architecture`. Requires `GETI_HOST`; `GETI_TOKEN` is optional for local Geti deployments.
 
 ```bash
 curl -X POST "http://<host-ip>:8200/api/v1/models/list" \
@@ -535,7 +533,7 @@ curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=hf_gate
   }'
 ```
 
-**Download a Geti™ model with per-request credentials override (`GETI_HOST`, `GETI_TOKEN`, `GETI_WORKSPACE_ID`):**
+**Download a Geti™ model with per-request credentials override (`GETI_HOST`, `GETI_TOKEN`):**
 
 ```bash
 curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=geti_override" \
@@ -549,7 +547,6 @@ curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=geti_ov
         "override_credentials": {
           "GETI_HOST": "<base64_GETI_HOST>",
           "GETI_TOKEN": "<base64_GETI_TOKEN>",
-          "GETI_WORKSPACE_ID": "<base64_GETI_WORKSPACE_ID>"
         },
         "config": {
           "precision": "fp16"

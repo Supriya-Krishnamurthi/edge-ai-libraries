@@ -573,7 +573,7 @@ paths:
         `meta-llama`).
 
         For `geti`, listing requires `GETI_HOST`, `GETI_TOKEN`, and
-        `GETI_WORKSPACE_ID` to be configured.
+        `GETI_HOST` to be configured; `GETI_TOKEN` is optional for local Geti 3.0.
 
         Use `GET /api/v1/plugins` to discover each plugin's `listing_filter_fields`.
 

@@ -46,10 +46,8 @@ The service starts on port **8200** and exposes its API at `http://localhost:820
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `GETI_HOST` | Yes | Geti server URL (e.g. `https://geti.example.com`) |
-| `GETI_TOKEN` | Yes | Geti API access token |
-| `GETI_WORKSPACE_ID` | Yes | Workspace ID from Geti UI |
+| `GETI_TOKEN` | No | Geti API access token; optional for local Geti 3.0 |
 | `GETI_SERVER_SSL_VERIFY` | No | Set `False` to disable SSL verification (default: `False`) |
-| `GETI_SERVER_API_VERSION` | No | API version (default: `v1`) |
 
 ### Service
 

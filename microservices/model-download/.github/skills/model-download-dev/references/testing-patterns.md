@@ -72,7 +72,6 @@ def mock_env_vars(monkeypatch):
     monkeypatch.setenv("HF_TOKEN", "test-token")
     monkeypatch.setenv("GETI_HOST", "https://geti.test")
     monkeypatch.setenv("GETI_TOKEN", "test-geti-token")
-    monkeypatch.setenv("GETI_WORKSPACE_ID", "test-workspace")
 ```
 
 ---

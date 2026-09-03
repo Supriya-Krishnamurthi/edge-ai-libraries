@@ -300,8 +300,7 @@ Downloads trained models from an Intel Geti server (base or optimized OpenVINO v
 **Required environment variables before starting service:**
 ```bash
 export GETI_HOST=https://geti.example.com
-export GETI_TOKEN=<your-api-token>
-export GETI_WORKSPACE_ID=<workspace-id>
+export GETI_TOKEN=<your-api-token>  # Optional for local Geti 3.0
 ```
 
 ### Request Body

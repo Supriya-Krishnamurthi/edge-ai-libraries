@@ -367,7 +367,7 @@ class ModelRequest(BaseModel):
         default=None,
         description=(
             "Optional per-request overrides for the target plugin's connection "
-            "keys (for example HF_TOKEN, or GETI_HOST/GETI_TOKEN/GETI_WORKSPACE_ID). "
+            "keys (for example HF_TOKEN, or GETI_HOST/GETI_TOKEN). "
             "Each value must be Base64-encoded (e.g. echo -n 'token' | base64). "
             "Values are decoded server-side and take precedence over the service's "
             "environment variables for this request only. They are never stored "
