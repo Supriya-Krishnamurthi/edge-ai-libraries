@@ -10,7 +10,16 @@ services:
     container_name: model-download
     command: --plugins ${ENABLED_PLUGINS:-all}
     environment:
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - http_proxy=${http_proxy:-}
+      - https_proxy=${https_proxy:-}
       - no_proxy=${no_proxy:-}
+      - NO_PROXY=${NO_PROXY:-}
+      - SSL_CERT_FILE=/opt/certs/ca-certificates.crt
+      - CURL_CA_BUNDLE=/opt/certs/ca-certificates.crt
+      - REQUESTS_CA_BUNDLE=/opt/certs/ca-certificates.crt
+      - GIT_SSL_CAINFO=/opt/certs/ca-certificates.crt
       - HF_HUB_ENABLE_HF_TRANSFER=1
       - HF_TOKEN=${HUGGINGFACEHUB_API_TOKEN:-}
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-500}
@@ -37,6 +46,7 @@ services:
       - "8200:8000"
     volumes:
       - ${MODEL_PATH:-~/models}:/opt/models
+      - ${HOST_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}:/opt/certs/ca-certificates.crt:ro
       - type: bind
         source: ${STARTUP_MODELS_CONFIG_HOST_PATH:-/dev/null}
         target: ${STARTUP_MODELS_CONFIG_HOST_PATH:-/dev/null}

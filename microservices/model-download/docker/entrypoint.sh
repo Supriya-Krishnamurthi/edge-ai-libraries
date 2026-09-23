@@ -23,6 +23,35 @@ PLUGIN_VENVS_FILE="/opt/plugin_venvs.env"
 PARALLEL_TMP_DIR=$(mktemp -d)
 # Cleanup temp dir on exit
 trap 'rm -rf "${PARALLEL_TMP_DIR}"' EXIT
+TIMING_LOG="${PARALLEL_TMP_DIR}/timing.log"
+: > "${TIMING_LOG}"
+
+timestamp() {
+    date '+%Y-%m-%dT%H:%M:%S%z'
+}
+
+time_command() {
+    local label=$1
+    shift
+    local start_epoch end_epoch rc elapsed start_timestamp end_timestamp
+
+    start_epoch=$(date +%s)
+    start_timestamp=$(timestamp)
+    print_info "[timing] ${label} START ${start_timestamp}"
+    if "$@"; then
+        rc=0
+    else
+        rc=$?
+    fi
+    end_epoch=$(date +%s)
+    elapsed=$((end_epoch - start_epoch))
+    end_timestamp=$(timestamp)
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+        "${label}" "${start_timestamp}" "${end_timestamp}" "${elapsed}" "${rc}" \
+        >> "${TIMING_LOG}"
+    print_info "[timing] ${label} END ${end_timestamp} elapsed=${elapsed}s rc=${rc}"
+    return ${rc}
+}
 
 # Function to print status messages
 print_success() {
@@ -45,6 +74,19 @@ print_header() {
     echo -e "${CYAN}=======================================${NC}"
     echo -e "${CYAN}   $1${NC}"
     echo -e "${CYAN}=======================================${NC}"
+}
+
+print_timing_summary() {
+    print_header "Startup timing summary"
+    printf '  %-38s %-25s %-25s %10s %6s\n' \
+        "PHASE" "START" "END" "DURATION" "RC"
+    printf '  %-38s %-25s %-25s %10s %6s\n' \
+        "--------------------------------------" "-------------------------" \
+        "-------------------------" "--------" "------"
+    while IFS=$'\t' read -r label start_timestamp end_timestamp elapsed rc; do
+        printf '  %-38s %-25s %-25s %8ss %6s\n' \
+            "${label}" "${start_timestamp}" "${end_timestamp}" "${elapsed}" "${rc}"
+    done < "${TIMING_LOG}"
 }
 
 # Function to install dependencies for a single plugin.
@@ -147,9 +189,23 @@ install_dependencies() {
             mkdir -p /opt/bin
 
             echo -e "${BLUE}INFO:${NC} Downloading and extracting Ollama ${OLLAMA_VERSION} binary only..."
-            # Stream the archive and extract only the ollama binary - avoids writing full archive to disk
-            if ! curl -fSL "${OLLAMA_URL}" | tar --use-compress-program=unzstd -xf - -C /opt/bin --strip-components=1 bin/ollama; then
-                echo -e "${RED} ERROR:${NC} Failed to download or extract Ollama binary"
+            # Download completely before extraction so a network/TLS failure is
+            # not reported as a misleading truncated tar stream.
+            if ! curl -fSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 600 \
+                -o "${OLLAMA_ARCHIVE}" "${OLLAMA_URL}"; then
+                echo -e "${RED} ERROR:${NC} Failed to download Ollama archive. Check proxy and CA certificate settings."
+                echo "1" > "${status_file}"
+                return 1
+            fi
+
+            if ! tar --use-compress-program=unzstd -tf "${OLLAMA_ARCHIVE}" >/dev/null; then
+                echo -e "${RED} ERROR:${NC} Ollama archive is incomplete or invalid: ${OLLAMA_ARCHIVE}"
+                echo "1" > "${status_file}"
+                return 1
+            fi
+
+            if ! tar --use-compress-program=unzstd -xf "${OLLAMA_ARCHIVE}" -C /opt/bin --strip-components=1 bin/ollama; then
+                echo -e "${RED} ERROR:${NC} Failed to extract Ollama binary from ${OLLAMA_ARCHIVE}"
                 echo "1" > "${status_file}"
                 return 1
             fi
@@ -234,7 +290,14 @@ run_plugins_parallel() {
 
     for plugin in "${plugins[@]}"; do
         # Pipe output through awk for real-time prefixed streaming
-        (install_dependencies "${plugin}") 2>&1 \
+        (
+            if time_command "plugin-preparation:${plugin}" install_dependencies "${plugin}"; then
+                exit_code=0
+            else
+                exit_code=$?
+            fi
+            exit "${exit_code}"
+        ) 2>&1 \
             | awk -v p="${plugin}" '{ print "[" p "] " $0; fflush() }' &
         pids+=("$!")
         print_info "Started setup for plugin: ${plugin}"
@@ -365,12 +428,12 @@ export PATH="/opt/bin/:$PATH"
 # Generate a lockfile so per-plugin venv syncs below can resolve packages from
 # the current pyproject.toml and any declared extras/conflicts.
 print_info "Generating lockfile..."
-if ! uv lock; then
+if ! time_command "dependency-sync:uv-lock" uv lock; then
     print_warning "Failed to generate lockfile; plugin venvs may be incomplete"
 fi
 
 print_info "Installing core dependencies from pyproject.toml..."
-if ! uv sync --no-dev; then
+if ! time_command "dependency-sync:base" uv sync --no-dev; then
     print_error "Failed to sync base dependencies"
     exit 1
 fi
@@ -391,8 +454,8 @@ for plugin in "${ACTIVATED_PLUGIN_LIST[@]}"; do
     if [[ "$plugin" == "omz" ]]; then
         OMZ_VENV="/opt/.venv-omz"
         print_info "Creating isolated OMZ venv at ${OMZ_VENV} with openvino-dev==2024.6.0"
-        if UV_PROJECT_ENVIRONMENT="${OMZ_VENV}" uv sync --extra omz --no-dev; then
-            if uv pip install --python "${OMZ_VENV}/bin/python" -r /opt/requirements/omz.txt --index-url https://pypi.org/simple --extra-index-url https://download.pytorch.org/whl/cpu; then
+        if time_command "venv-sync:${plugin}" env UV_PROJECT_ENVIRONMENT="${OMZ_VENV}" uv sync --extra omz --no-dev; then
+            if time_command "dependency-sync:${plugin}-requirements" uv pip install --python "${OMZ_VENV}/bin/python" -r /opt/requirements/omz.txt --index-url https://pypi.org/simple --extra-index-url https://download.pytorch.org/whl/cpu; then
                 if "${OMZ_VENV}/bin/omz_downloader" --help > /dev/null 2>&1; then
                     print_success "OMZ venv created with openvino-dev and OMZ tools ready"
                     echo "OMZ_VENV=${OMZ_VENV}" >> "${PLUGIN_VENVS_FILE}"
@@ -420,14 +483,14 @@ for plugin in "${ACTIVATED_PLUGIN_LIST[@]}"; do
     PLUGIN_VENV="/opt/.venv-${plugin}"
     print_info "Creating venv for plugin '${plugin}' at ${PLUGIN_VENV} ..."
 
-    if UV_PROJECT_ENVIRONMENT="${PLUGIN_VENV}" uv sync --extra "${plugin}" --no-dev; then
+    if time_command "venv-sync:${plugin}" env UV_PROJECT_ENVIRONMENT="${PLUGIN_VENV}" uv sync --extra "${plugin}" --no-dev; then
         print_success "Plugin venv created: ${plugin}"
 
         # For openvino with a custom OVMS release tag, also install the
         # version-specific requirements on top of the plugin venv.
         if [[ "$plugin" == "openvino" && -n "${OVMS_REQUIREMENTS_FILE}" && -f "${OVMS_REQUIREMENTS_FILE}" ]]; then
             print_info "Installing custom OVMS requirements into openvino venv: ${OVMS_REQUIREMENTS_FILE}"
-            if uv pip install --python "${PLUGIN_VENV}/bin/python" -r "${OVMS_REQUIREMENTS_FILE}"; then
+            if time_command "dependency-sync:${plugin}-custom-requirements" uv pip install --python "${PLUGIN_VENV}/bin/python" -r "${OVMS_REQUIREMENTS_FILE}"; then
                 print_success "Custom OVMS requirements installed in openvino venv"
             else
                 print_warning "Failed to install custom OVMS requirements, continuing with base openvino versions"
@@ -442,6 +505,8 @@ for plugin in "${ACTIVATED_PLUGIN_LIST[@]}"; do
 done
 
 print_success "All plugin venvs created"
+
+print_timing_summary
 
 # Activate the base virtual environment for the app process
 if [ -d "/opt/.venv" ]; then
